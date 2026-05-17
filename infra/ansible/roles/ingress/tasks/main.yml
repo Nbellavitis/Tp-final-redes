@@ -1,0 +1,4 @@
+---
+- name: Phase 0 placeholder for ingress controller installation
+  ansible.builtin.debug:
+    msg: "Fase futura: instalar Ingress Controller compatible con clase nginx."

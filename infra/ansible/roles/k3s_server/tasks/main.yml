@@ -1,0 +1,4 @@
+---
+- name: Phase 0 placeholder for K3s server installation
+  ansible.builtin.debug:
+    msg: "Fase futura: instalar K3s server en el Control Plane."

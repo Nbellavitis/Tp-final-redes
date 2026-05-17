@@ -1,0 +1,4 @@
+---
+- name: Phase 0 placeholder for K3s agent installation
+  ansible.builtin.debug:
+    msg: "Fase futura: unir Workers al cluster usando el token del Control Plane."

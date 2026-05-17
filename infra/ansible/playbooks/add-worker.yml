@@ -1,0 +1,7 @@
+---
+- name: Configure and join additional K3s workers
+  hosts: workers
+  become: true
+  roles:
+    - common
+    - k3s_agent

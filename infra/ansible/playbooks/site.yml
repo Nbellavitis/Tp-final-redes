@@ -1,0 +1,24 @@
+---
+- name: Configure base operating system on K3s nodes
+  hosts: k3s_cluster
+  become: true
+  roles:
+    - common
+
+- name: Install K3s control plane
+  hosts: control_plane
+  become: true
+  roles:
+    - k3s_server
+
+- name: Join K3s worker nodes
+  hosts: workers
+  become: true
+  roles:
+    - k3s_agent
+
+- name: Install ingress controller
+  hosts: control_plane
+  become: true
+  roles:
+    - ingress

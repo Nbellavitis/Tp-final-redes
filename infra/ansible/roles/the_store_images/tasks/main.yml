@@ -1,0 +1,4 @@
+---
+- name: Phase 0 placeholder for local image import
+  ansible.builtin.debug:
+    msg: "Fase futura: copiar e importar imagenes the-store-* en containerd de K3s."

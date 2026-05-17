@@ -1,0 +1,4 @@
+---
+- name: Phase 0 placeholder for common node configuration
+  ansible.builtin.debug:
+    msg: "Fase futura: instalar dependencias, configurar kernel params y firewall."

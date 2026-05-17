@@ -1,0 +1,53 @@
+# frozen_string_literal: true
+
+# Infraestructura local del TPE:
+# - 1 Control Plane K3s
+# - 2 Workers K3s
+# - Ubuntu Server 24.04 LTS
+# - Red privada 192.168.56.0/24
+
+NODES = [
+  {
+    name: "k3s-control",
+    hostname: "k3s-control",
+    ip: "192.168.56.10",
+    cpus: 2,
+    memory: 2048
+  },
+  {
+    name: "k3s-worker-1",
+    hostname: "k3s-worker-1",
+    ip: "192.168.56.11",
+    cpus: 2,
+    memory: 2048
+  },
+  {
+    name: "k3s-worker-2",
+    hostname: "k3s-worker-2",
+    ip: "192.168.56.12",
+    cpus: 2,
+    memory: 2048
+  }
+].freeze
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "bento/ubuntu-24.04"
+  config.vm.box_check_update = false
+  config.ssh.insert_key = true
+  config.vm.boot_timeout = 1200
+
+  NODES.each do |node|
+    config.vm.define node[:name] do |machine|
+      machine.vm.hostname = node[:hostname]
+      machine.vm.network "private_network", ip: node[:ip]
+
+      machine.vm.provider "virtualbox" do |vb|
+        vb.name = "tpe-redes-#{node[:name]}"
+        vb.cpus = node[:cpus]
+        vb.memory = node[:memory]
+        vb.gui = ENV.fetch("VAGRANT_GUI", "false") == "true"
+        vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+      end
+    end
+  end
+end
