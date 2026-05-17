@@ -31,6 +31,25 @@ devenv.local.nix
 
 .pre-commit-config.yaml
 
+# TPE tracked project content
+!src/
+!src/**
+!dist/
+!dist/**
+!samples/
+!samples/**
+!scripts/
+!scripts/**
+!infra/
+!infra/**
+!docs/
+!docs/**
+!local.sh
+!README.md
+!LICENSE
+!.github/
+!.github/**
+
 # TPE local artifacts
 .vagrant/
 **/.vagrant/
