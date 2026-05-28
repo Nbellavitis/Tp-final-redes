@@ -28,6 +28,7 @@ ansible-playbook playbooks/site.yml --tags common
 - `common`: prerequisitos del sistema operativo.
 - `k3s_server`: instalacion del Control Plane.
 - `k3s_agent`: union de Workers.
+- `k3s_cluster_validation`: validacion de nodos desde el Control Plane.
 - `k3s_kubeconfig`: exportacion de kubeconfig para operar desde el host.
 - `ingress`: Ingress Controller.
 - `the_store_images`: distribucion/importacion de imagenes locales.

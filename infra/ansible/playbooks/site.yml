@@ -23,6 +23,15 @@
   roles:
     - k3s_agent
 
+- name: Validate K3s cluster nodes
+  hosts: control_plane
+  become: true
+  tags:
+    - k3s_agent
+    - k3s_validation
+  roles:
+    - k3s_cluster_validation
+
 - name: Export kubeconfig for host-side kubectl
   hosts: control_plane
   become: true

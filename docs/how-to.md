@@ -176,6 +176,8 @@ Archivos implementados:
 - `infra/ansible/roles/k3s_agent/defaults/main.yml`
 - `infra/ansible/roles/k3s_agent/handlers/main.yml`
 - `infra/ansible/roles/k3s_agent/tasks/main.yml`
+- `infra/ansible/roles/k3s_cluster_validation/defaults/main.yml`
+- `infra/ansible/roles/k3s_cluster_validation/tasks/main.yml`
 - `infra/ansible/inventory/hosts.yml`
 - `infra/ansible/inventory/hosts-wsl.yml`
 

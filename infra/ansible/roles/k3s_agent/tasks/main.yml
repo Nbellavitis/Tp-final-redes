@@ -53,12 +53,3 @@
     name: k3s-agent
     enabled: true
     state: started
-
-- name: Wait until worker appears in Kubernetes
-  ansible.builtin.command: "/usr/local/bin/kubectl get node {{ inventory_hostname }}"
-  delegate_to: "{{ k3s_control_plane_host }}"
-  register: k3s_agent_node_check
-  changed_when: false
-  retries: 20
-  delay: 6
-  until: k3s_agent_node_check.rc == 0
