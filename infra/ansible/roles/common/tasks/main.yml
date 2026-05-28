@@ -1,4 +1,72 @@
 ---
-- name: Phase 0 placeholder for common node configuration
-  ansible.builtin.debug:
-    msg: "Fase futura: instalar dependencias, configurar kernel params y firewall."
+- name: Update apt package cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install base packages required by K3s
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"
+    state: present
+
+- name: Ensure required kernel modules load on boot
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k3s.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      {% for module in common_kernel_modules %}
+      {{ module }}
+      {% endfor %}
+
+- name: Load required kernel modules now
+  ansible.builtin.command: "modprobe {{ item }}"
+  changed_when: false
+  loop: "{{ common_kernel_modules }}"
+
+- name: Configure sysctl settings for Kubernetes networking
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-k3s.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      {% for key, value in common_sysctl_settings.items() %}
+      {{ key }}={{ value }}
+      {% endfor %}
+  notify: Reload sysctl
+
+- name: Apply sysctl settings immediately
+  ansible.builtin.command: sysctl --system
+  changed_when: false
+
+- name: Disable swap for Kubernetes compatibility
+  ansible.builtin.command: swapoff -a
+  changed_when: false
+  when: ansible_swaptotal_mb | default(0) | int > 0
+
+- name: Remove active swap entries from fstab
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^\s*([^#]\S+\s+\S+\s+swap\s+\S+.*)$'
+    replace: '# \1'
+
+- name: Check whether UFW is installed
+  ansible.builtin.command: command -v ufw
+  register: common_ufw_check
+  changed_when: false
+  failed_when: false
+
+- name: Allow required firewall ports if UFW is installed
+  ansible.builtin.command: "ufw {{ item.rule }} {{ item.port }}/{{ item.proto }} comment '{{ item.comment }}'"
+  changed_when: "'Rule added' in common_ufw_rule.stdout"
+  register: common_ufw_rule
+  loop: "{{ common_ufw_allowed_ports }}"
+  when: common_ufw_check.rc == 0
+
+- name: Ensure open-iscsi service is enabled for future storage compatibility
+  ansible.builtin.service:
+    name: iscsid
+    enabled: true
+    state: started

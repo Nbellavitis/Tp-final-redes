@@ -1,4 +1,64 @@
 ---
-- name: Phase 0 placeholder for K3s agent installation
-  ansible.builtin.debug:
-    msg: "Fase futura: unir Workers al cluster usando el token del Control Plane."
+- name: Ensure Control Plane token is available
+  ansible.builtin.assert:
+    that:
+      - hostvars[k3s_control_plane_host].k3s_server_node_token is defined
+      - hostvars[k3s_control_plane_host].k3s_server_node_token | length > 0
+    fail_msg: "K3s node token is missing. Run the k3s_server role before k3s_agent."
+
+- name: Ensure K3s agent config directory exists
+  ansible.builtin.file:
+    path: "{{ k3s_agent_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure K3s agent
+  ansible.builtin.copy:
+    dest: "{{ k3s_agent_config_dir }}/config.yaml"
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      server: "{{ k3s_server_url }}"
+      token: "{{ hostvars[k3s_control_plane_host].k3s_server_node_token }}"
+      node-ip: "{{ k3s_agent_node_ip }}"
+  notify: Restart k3s-agent
+  no_log: true
+
+- name: Check whether K3s agent is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s-agent
+  register: k3s_agent_binary
+
+- name: Download K3s installer
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: "{{ k3s_agent_install_script_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  when: not k3s_agent_binary.stat.exists
+
+- name: Install K3s agent
+  ansible.builtin.command: "sh {{ k3s_agent_install_script_path }} agent"
+  environment:
+    INSTALL_K3S_CHANNEL: "{{ k3s_channel }}"
+  changed_when: true
+  when: not k3s_agent_binary.stat.exists
+
+- name: Ensure K3s agent service is enabled and running
+  ansible.builtin.service:
+    name: k3s-agent
+    enabled: true
+    state: started
+
+- name: Wait until worker appears in Kubernetes
+  ansible.builtin.command: "/usr/local/bin/kubectl get node {{ inventory_hostname }}"
+  delegate_to: "{{ k3s_control_plane_host }}"
+  register: k3s_agent_node_check
+  changed_when: false
+  retries: 20
+  delay: 6
+  until: k3s_agent_node_check.rc == 0

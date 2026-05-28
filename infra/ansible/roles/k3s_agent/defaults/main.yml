@@ -1,0 +1,8 @@
+---
+k3s_channel: stable
+k3s_control_plane_host: k3s-control
+k3s_control_plane_ip: "{{ hostvars[k3s_control_plane_host].k3s_node_ip | default('192.168.56.10') }}"
+k3s_server_url: "https://{{ k3s_control_plane_ip }}:6443"
+k3s_agent_node_ip: "{{ k3s_node_ip | default(ansible_host) }}"
+k3s_agent_config_dir: /etc/rancher/k3s
+k3s_agent_install_script_path: /tmp/k3s-install.sh

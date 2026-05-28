@@ -1,4 +1,94 @@
 ---
-- name: Phase 0 placeholder for K3s server installation
+- name: Ensure K3s config directory exists
+  ansible.builtin.file:
+    path: "{{ k3s_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure K3s server
+  ansible.builtin.copy:
+    dest: "{{ k3s_config_dir }}/config.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      node-ip: "{{ k3s_control_plane_ip }}"
+      advertise-address: "{{ k3s_control_plane_ip }}"
+      tls-san:
+        - "{{ k3s_control_plane_ip }}"
+      cluster-cidr: "{{ k3s_pod_cidr }}"
+      service-cidr: "{{ k3s_service_cidr }}"
+      flannel-backend: "{{ k3s_flannel_backend }}"
+      write-kubeconfig-mode: "0644"
+      disable:
+      {% for component in k3s_disable_components %}
+        - "{{ component }}"
+      {% endfor %}
+  notify: Restart k3s
+
+- name: Check whether K3s is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_server_binary
+
+- name: Download K3s installer
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: "{{ k3s_install_script_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  when: not k3s_server_binary.stat.exists
+
+- name: Install K3s server
+  ansible.builtin.command: "sh {{ k3s_install_script_path }} server"
+  environment:
+    INSTALL_K3S_CHANNEL: "{{ k3s_channel }}"
+  changed_when: true
+  when: not k3s_server_binary.stat.exists
+
+- name: Ensure K3s service is enabled and running
+  ansible.builtin.service:
+    name: k3s
+    enabled: true
+    state: started
+
+- name: Wait for K3s kubeconfig
+  ansible.builtin.wait_for:
+    path: "{{ k3s_kubeconfig_path }}"
+    timeout: 120
+
+- name: Wait for K3s node token
+  ansible.builtin.wait_for:
+    path: "{{ k3s_node_token_path }}"
+    timeout: 120
+
+- name: Wait for Kubernetes API to answer
+  ansible.builtin.command: /usr/local/bin/kubectl get nodes
+  register: k3s_server_kubectl_nodes
+  changed_when: false
+  retries: 20
+  delay: 6
+  until: k3s_server_kubectl_nodes.rc == 0
+
+- name: Read K3s node token for worker joins
+  ansible.builtin.slurp:
+    src: "{{ k3s_node_token_path }}"
+  register: k3s_server_node_token_raw
+  no_log: true
+
+- name: Expose K3s node token as an Ansible fact
+  ansible.builtin.set_fact:
+    k3s_server_node_token: "{{ k3s_server_node_token_raw.content | b64decode | trim }}"
+  no_log: true
+
+- name: Show Control Plane status
+  ansible.builtin.command: /usr/local/bin/kubectl get nodes -o wide
+  register: k3s_server_status
+  changed_when: false
+
+- name: Print Control Plane status
   ansible.builtin.debug:
-    msg: "Fase futura: instalar K3s server en el Control Plane."
+    var: k3s_server_status.stdout_lines

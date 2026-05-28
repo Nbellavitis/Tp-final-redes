@@ -1,0 +1,35 @@
+---
+common_packages:
+  - apt-transport-https
+  - ca-certificates
+  - conntrack
+  - curl
+  - gnupg
+  - iproute2
+  - iptables
+  - jq
+  - lsb-release
+  - net-tools
+  - nfs-common
+  - open-iscsi
+  - python3
+  - python3-apt
+  - socat
+  - tar
+  - unzip
+
+common_kernel_modules:
+  - overlay
+  - br_netfilter
+
+common_sysctl_settings:
+  net.bridge.bridge-nf-call-iptables: "1"
+  net.bridge.bridge-nf-call-ip6tables: "1"
+  net.ipv4.ip_forward: "1"
+
+common_ufw_allowed_ports:
+  - { rule: allow, port: "22", proto: tcp, comment: "SSH" }
+  - { rule: allow, port: "6443", proto: tcp, comment: "Kubernetes API Server" }
+  - { rule: allow, port: "8472", proto: udp, comment: "Flannel VXLAN" }
+  - { rule: allow, port: "80", proto: tcp, comment: "HTTP Ingress" }
+  - { rule: allow, port: "443", proto: tcp, comment: "HTTPS Ingress" }

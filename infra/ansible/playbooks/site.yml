@@ -2,23 +2,39 @@
 - name: Configure base operating system on K3s nodes
   hosts: k3s_cluster
   become: true
+  tags:
+    - common
   roles:
     - common
 
 - name: Install K3s control plane
   hosts: control_plane
   become: true
+  tags:
+    - k3s_server
   roles:
     - k3s_server
 
 - name: Join K3s worker nodes
   hosts: workers
   become: true
+  tags:
+    - k3s_agent
   roles:
     - k3s_agent
+
+- name: Export kubeconfig for host-side kubectl
+  hosts: control_plane
+  become: true
+  tags:
+    - kubeconfig
+  roles:
+    - k3s_kubeconfig
 
 - name: Install ingress controller
   hosts: control_plane
   become: true
+  tags:
+    - ingress
   roles:
     - ingress

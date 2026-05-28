@@ -11,6 +11,7 @@ NODES = [
     name: "k3s-control",
     hostname: "k3s-control",
     ip: "192.168.56.10",
+    ssh_port: 2222,
     cpus: 2,
     memory: 2048
   },
@@ -18,6 +19,7 @@ NODES = [
     name: "k3s-worker-1",
     hostname: "k3s-worker-1",
     ip: "192.168.56.11",
+    ssh_port: 2200,
     cpus: 2,
     memory: 2048
   },
@@ -25,6 +27,7 @@ NODES = [
     name: "k3s-worker-2",
     hostname: "k3s-worker-2",
     ip: "192.168.56.12",
+    ssh_port: 2201,
     cpus: 2,
     memory: 2048
   }
@@ -35,11 +38,21 @@ Vagrant.configure("2") do |config|
   config.vm.box_check_update = false
   config.ssh.insert_key = true
   config.vm.boot_timeout = 1200
+  expose_ssh = ENV.fetch("VAGRANT_EXPOSE_SSH", "false") == "true"
 
   NODES.each do |node|
     config.vm.define node[:name] do |machine|
       machine.vm.hostname = node[:hostname]
       machine.vm.network "private_network", ip: node[:ip]
+
+      if expose_ssh
+        machine.vm.network "forwarded_port",
+                           guest: 22,
+                           host: node[:ssh_port],
+                           host_ip: "0.0.0.0",
+                           id: "ssh",
+                           auto_correct: false
+      end
 
       machine.vm.provider "virtualbox" do |vb|
         vb.name = "tpe-redes-#{node[:name]}"

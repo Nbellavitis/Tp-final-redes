@@ -66,3 +66,23 @@ vagrant ssh k3s-control -c 'hostname -I'
 vagrant ssh k3s-worker-1 -c 'hostname -I'
 vagrant ssh k3s-worker-2 -c 'hostname -I'
 ```
+
+## Uso con Ansible desde WSL
+
+El flujo principal usa la red privada `192.168.56.0/24`, que suele funcionar directo en macOS, Linux y Windows.
+
+En WSL puede ocurrir que no exista ruta directa a la red host-only de VirtualBox. Para ese caso, el `Vagrantfile` puede exponer SSH por puertos NAT si se activa `VAGRANT_EXPOSE_SSH=true`:
+
+| VM | Puerto host |
+| --- | --- |
+| `k3s-control` | `2222` |
+| `k3s-worker-1` | `2200` |
+| `k3s-worker-2` | `2201` |
+
+Desde PowerShell:
+
+```powershell
+cd "C:\Users\nico\Desktop\ITBA\Redes\Tp-final\infra"
+$env:VAGRANT_EXPOSE_SSH="true"
+vagrant reload
+```

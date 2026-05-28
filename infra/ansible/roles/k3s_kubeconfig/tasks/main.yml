@@ -1,0 +1,35 @@
+---
+- name: Wait for remote K3s kubeconfig
+  ansible.builtin.wait_for:
+    path: "{{ k3s_kubeconfig_remote_path }}"
+    timeout: 120
+
+- name: Read remote K3s kubeconfig
+  ansible.builtin.slurp:
+    src: "{{ k3s_kubeconfig_remote_path }}"
+  register: k3s_kubeconfig_remote
+  no_log: true
+
+- name: Render kubeconfig for host-side kubectl
+  ansible.builtin.set_fact:
+    k3s_kubeconfig_rendered: >-
+      {{
+        k3s_kubeconfig_remote.content
+        | b64decode
+        | regex_replace('server: https://127\\.0\\.0\\.1:6443', 'server: ' ~ k3s_kubeconfig_server_url)
+        | regex_replace('server: https://localhost:6443', 'server: ' ~ k3s_kubeconfig_server_url)
+      }}
+  no_log: true
+
+- name: Write kubeconfig on the Ansible controller
+  ansible.builtin.copy:
+    dest: "{{ k3s_kubeconfig_local_path }}"
+    content: "{{ k3s_kubeconfig_rendered }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Show kubeconfig path
+  ansible.builtin.debug:
+    msg: "Kubeconfig exported to {{ k3s_kubeconfig_local_path }}"
