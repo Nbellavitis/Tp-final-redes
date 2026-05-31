@@ -28,10 +28,14 @@ ansible-playbook playbooks/site.yml --tags common
 - `common`: prerequisitos del sistema operativo.
 - `k3s_server`: instalacion del Control Plane.
 - `k3s_agent`: union de Workers.
-- `k3s_cluster_validation`: validacion de nodos desde el Control Plane.
+- `k3s_cluster_validation`: validacion de nodos `Ready` desde el Control Plane.
 - `k3s_kubeconfig`: exportacion de kubeconfig para operar desde el host.
-- `ingress`: Ingress Controller.
+- `ingress`: instalacion y validacion de `ingress-nginx`.
 - `the_store_images`: distribucion/importacion de imagenes locales.
+
+K3s se instala con version pinneada `v1.35.5+k3s1` en server y agents para evitar que una re-ejecucion o un worker agregado mas adelante tome una version distinta del canal `stable`.
+
+`ingress-nginx` se instala con version pinneada `controller-v1.13.1`, manifiesto `provider/baremetal` y controller con `hostNetwork` en `k3s-control` para exponer HTTP/HTTPS por `192.168.56.10`.
 
 ## Fases implementadas
 
@@ -51,6 +55,7 @@ Validacion:
 
 ```bash
 ansible -i inventory/hosts.yml control_plane -b -m command -a "/usr/local/bin/kubectl get nodes -o wide"
+ansible -i inventory/hosts.yml control_plane -b -m command -a "/usr/local/bin/kubectl wait --for=condition=Ready node/k3s-control --timeout=180s"
 ```
 
 ### Fase 5: K3s Workers
@@ -63,6 +68,7 @@ Validacion:
 
 ```bash
 ansible -i inventory/hosts.yml control_plane -b -m command -a "/usr/local/bin/kubectl get nodes -o wide"
+ansible -i inventory/hosts.yml control_plane -b -m command -a "/usr/local/bin/kubectl wait --for=condition=Ready nodes --all --timeout=180s"
 ```
 
 ### Fase 6: kubeconfig local
@@ -77,6 +83,20 @@ Uso:
 cd ../..
 export KUBECONFIG="$PWD/infra/kubeconfig"
 kubectl get nodes -o wide
+```
+
+### Fase 7: Ingress Controller
+
+```bash
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml --tags ingress
+```
+
+Validacion:
+
+```bash
+kubectl get pods -n ingress-nginx
+kubectl get svc -n ingress-nginx
+kubectl get ingressclass nginx
 ```
 
 ## Ejecucion por plataforma
@@ -122,3 +142,5 @@ Validar conectividad y ejecutar fase 3:
 ansible -i inventory/hosts-wsl.yml k3s_cluster -m ping
 ansible-playbook -i inventory/hosts-wsl.yml playbooks/site.yml --tags common
 ```
+
+El inventario WSL solo resuelve SSH/Ansible por NAT. El kubeconfig generado apunta a `https://192.168.56.10:6443`; si WSL no tiene ruta a la red host-only, usar `kubectl` desde Windows/macOS/Linux con acceso a esa red o validar desde el Control Plane con `vagrant ssh k3s-control -c 'sudo kubectl ...'`.

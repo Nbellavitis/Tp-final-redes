@@ -16,11 +16,13 @@ Fase 3 completada a nivel implementacion: Ansible base queda definido en el rol 
 
 Nota: la ejecucion contra VMs debe correrla cada integrante desde su entorno, usando el inventario principal o el inventario alternativo para WSL segun corresponda.
 
-Fase 4 completada a nivel implementacion: el rol `k3s_server` instala y configura K3s server en `k3s-control`.
+Fase 4 completada a nivel implementacion: el rol `k3s_server` instala y configura K3s server en `k3s-control`, usando una version pinneada y validando que el nodo quede `Ready`.
 
-Fase 5 completada a nivel implementacion: el rol `k3s_agent` une `k3s-worker-1` y `k3s-worker-2` al cluster usando automaticamente el token del Control Plane.
+Fase 5 completada a nivel implementacion: el rol `k3s_agent` une `k3s-worker-1` y `k3s-worker-2` al cluster usando automaticamente el token del Control Plane y validando que ambos workers queden `Ready`.
 
 Fase 6 completada a nivel implementacion: el rol `k3s_kubeconfig` exporta `infra/kubeconfig` para operar el cluster desde el host.
+
+Fase 7 completada a nivel implementacion: el rol `ingress` instala `ingress-nginx` compatible con la clase `nginx` del manifiesto de The Store y valida que el controller quede listo.
 
 | Imagen | ID | Tamano aproximado |
 | --- | --- | --- |
@@ -55,10 +57,9 @@ vagrant status
 
 Las fases siguientes completaran:
 
-1. Ingress Controller.
-2. Distribucion de imagenes.
-3. Deploy de The Store.
-4. Alta de un nuevo Worker.
+1. Distribucion de imagenes.
+2. Deploy de The Store.
+3. Alta de un nuevo Worker.
 
 ## Fase 3: Ansible base
 
@@ -69,6 +70,7 @@ El rol `common` prepara las VMs para Kubernetes:
 - Configura `sysctl` para forwarding y bridge networking.
 - Desactiva swap.
 - Deja permitidos los puertos principales si UFW esta instalado.
+- Mantiene el alcance acotado a Kubernetes/K3s y diagnostico, sin componentes de storage fuera del POC.
 
 Archivos implementados:
 
@@ -117,10 +119,13 @@ ansible -i inventory/hosts-wsl.yml k3s_cluster -m ping
 ansible-playbook -i inventory/hosts-wsl.yml playbooks/site.yml --tags common
 ```
 
+Nota: el inventario WSL expone SSH por NAT para Ansible. Si WSL no tiene ruta a `192.168.56.0/24`, el kubeconfig exportado no servira desde WSL; en ese caso validar con `vagrant ssh k3s-control -c 'sudo kubectl ...'` o ejecutar `kubectl` desde un host con acceso a la red host-only.
+
 ## Fase 4: K3s Control Plane
 
 El rol `k3s_server` instala K3s server en `k3s-control` y configura:
 
+- Version K3s pinneada: `v1.35.5+k3s1`.
 - IP del nodo y advertise address: `192.168.56.10`.
 - Pod CIDR: `10.42.0.0/16`.
 - Service CIDR: `10.43.0.0/16`.
@@ -128,6 +133,7 @@ El rol `k3s_server` instala K3s server en `k3s-control` y configura:
 - Kubeconfig legible en `/etc/rancher/k3s/k3s.yaml`.
 - Traefik deshabilitado para instalar luego un Ingress Controller `nginx` compatible con `dist/kubernetes.yaml`.
 - Token de join disponible como fact de Ansible para la fase de Workers.
+- Validacion explicita de que `k3s-control` quede con condicion `Ready`.
 
 Archivos implementados:
 
@@ -165,11 +171,12 @@ k3s-control   Ready
 
 El rol `k3s_agent` une los Workers al cluster K3s:
 
+- Usa la misma version K3s pinneada que el Control Plane: `v1.35.5+k3s1`.
 - Lee el token generado por el Control Plane desde los facts de Ansible.
 - Configura cada worker con `server: https://192.168.56.10:6443`.
 - Usa la IP privada real del nodo como `node-ip`.
-- Instala `k3s-agent` de forma idempotente.
-- Espera a que cada worker aparezca como nodo de Kubernetes.
+- Instala el agent de forma idempotente, detectando el binario `/usr/local/bin/k3s`.
+- Espera a que cada worker quede con condicion `Ready`.
 
 Archivos implementados:
 
@@ -238,6 +245,8 @@ cd infra/ansible
 ansible-playbook -i inventory/hosts-wsl.yml playbooks/site.yml --tags kubeconfig
 ```
 
+Importante para WSL: este rol siempre renderiza el kubeconfig contra `https://192.168.56.10:6443`. Si WSL no tiene ruta a esa red privada, el archivo sirve como artefacto generado pero `kubectl` debe ejecutarse desde el host con acceso host-only o desde el Control Plane por SSH.
+
 Uso desde la raiz del repo:
 
 ```bash
@@ -251,6 +260,49 @@ Resultado esperado:
 k3s-control    Ready
 k3s-worker-1   Ready
 k3s-worker-2   Ready
+```
+
+## Fase 7: Ingress Controller
+
+El rol `ingress` instala `ingress-nginx` para exponer servicios HTTP/HTTPS en K3s:
+
+- Usa `ingress-nginx` version `controller-v1.13.1`.
+- Aplica el manifiesto oficial `provider/baremetal`.
+- Ejecuta el controller con `hostNetwork` en `k3s-control` para publicar explicitamente `192.168.56.10:80` y `192.168.56.10:443`.
+- Valida que el deployment del controller quede `Available`.
+- Valida pods del controller `Ready`.
+- Valida que exista la `IngressClass` `nginx`.
+- Valida que el Service `ingress-nginx-controller` sea `NodePort`.
+- Valida que los puertos `80` y `443` respondan en la IP privada del Control Plane.
+
+Archivos implementados:
+
+- `infra/ansible/roles/ingress/defaults/main.yml`
+- `infra/ansible/roles/ingress/tasks/main.yml`
+- `infra/ansible/playbooks/site.yml`
+
+Comando con inventario principal:
+
+```bash
+cd infra/ansible
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml --tags ingress
+```
+
+Validacion esperada desde la raiz del repo:
+
+```bash
+export KUBECONFIG="$PWD/infra/kubeconfig"
+kubectl get pods -n ingress-nginx
+kubectl get svc -n ingress-nginx
+kubectl get ingressclass nginx
+```
+
+Resultado esperado:
+
+```text
+ingress-nginx-controller   Ready/Running
+ingress-nginx-controller   NodePort
+nginx                      IngressClass
 ```
 
 ## Referencia principal

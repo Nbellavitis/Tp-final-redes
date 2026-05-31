@@ -45,7 +45,7 @@
 - name: Install K3s server
   ansible.builtin.command: "sh {{ k3s_install_script_path }} server"
   environment:
-    INSTALL_K3S_CHANNEL: "{{ k3s_channel }}"
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
   changed_when: true
   when: not k3s_server_binary.stat.exists
 
@@ -54,6 +54,9 @@
     name: k3s
     enabled: true
     state: started
+
+- name: Apply pending K3s service restarts before validation
+  ansible.builtin.meta: flush_handlers
 
 - name: Wait for K3s kubeconfig
   ansible.builtin.wait_for:
@@ -72,6 +75,10 @@
   retries: 20
   delay: 6
   until: k3s_server_kubectl_nodes.rc == 0
+
+- name: Wait for Control Plane node to be Ready
+  ansible.builtin.command: "/usr/local/bin/kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=180s"
+  changed_when: false
 
 - name: Read K3s node token for worker joins
   ansible.builtin.slurp:

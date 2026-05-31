@@ -1,11 +1,7 @@
 ---
-- name: Wait until expected workers appear in Kubernetes
-  ansible.builtin.command: "/usr/local/bin/kubectl get node {{ item }}"
-  register: k3s_cluster_validation_node_check
+- name: Wait until expected workers are Ready in Kubernetes
+  ansible.builtin.command: "/usr/local/bin/kubectl wait --for=condition=Ready node/{{ item }} --timeout=180s"
   changed_when: false
-  retries: 20
-  delay: 6
-  until: k3s_cluster_validation_node_check.rc == 0
   loop: "{{ groups[k3s_expected_worker_group] | default([]) }}"
 
 - name: Show full K3s node status

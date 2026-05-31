@@ -16,9 +16,18 @@
       {{
         k3s_kubeconfig_remote.content
         | b64decode
-        | regex_replace('server: https://127\\.0\\.0\\.1:6443', 'server: ' ~ k3s_kubeconfig_server_url)
-        | regex_replace('server: https://localhost:6443', 'server: ' ~ k3s_kubeconfig_server_url)
+        | replace('https://127.0.0.1:6443', k3s_kubeconfig_server_url)
+        | replace('https://localhost:6443', k3s_kubeconfig_server_url)
       }}
+  no_log: true
+
+- name: Ensure rendered kubeconfig points to the Control Plane private IP
+  ansible.builtin.assert:
+    that:
+      - k3s_kubeconfig_rendered is search(k3s_kubeconfig_server_url)
+      - k3s_kubeconfig_rendered is not search('https://127\\.0\\.0\\.1:6443')
+      - k3s_kubeconfig_rendered is not search('https://localhost:6443')
+    fail_msg: "Rendered kubeconfig still points to localhost instead of {{ k3s_kubeconfig_server_url }}."
   no_log: true
 
 - name: Write kubeconfig on the Ansible controller

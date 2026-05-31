@@ -1,4 +1,130 @@
 ---
-- name: Phase 0 placeholder for ingress controller installation
+- name: Ensure Kubernetes API is available before installing ingress-nginx
+  ansible.builtin.command: /usr/local/bin/kubectl get nodes
+  register: ingress_kubectl_nodes
+  changed_when: false
+  retries: 20
+  delay: 6
+  until: ingress_kubectl_nodes.rc == 0
+
+- name: Check whether ingress-nginx controller already exists
+  ansible.builtin.command: "/usr/local/bin/kubectl get deployment {{ ingress_nginx_controller_name }} --namespace {{ ingress_nginx_namespace }}"
+  register: ingress_nginx_controller_check
+  changed_when: false
+  failed_when: false
+
+- name: Install ingress-nginx controller
+  ansible.builtin.command: "/usr/local/bin/kubectl apply -f {{ ingress_nginx_manifest_url }}"
+  register: ingress_nginx_apply
+  changed_when: "'created' in ingress_nginx_apply.stdout or 'configured' in ingress_nginx_apply.stdout"
+  when: ingress_nginx_controller_check.rc != 0
+
+- name: Wait for old K3s ServiceLB pods to be removed
+  ansible.builtin.command: >-
+    /usr/local/bin/kubectl get pods
+    --namespace kube-system
+    --selector svccontroller.k3s.cattle.io/svcname={{ ingress_nginx_controller_name }},svccontroller.k3s.cattle.io/svcnamespace={{ ingress_nginx_namespace }}
+    -o name
+  register: ingress_nginx_svclb_pods
+  changed_when: false
+  retries: 20
+  delay: 6
+  until: ingress_nginx_svclb_pods.stdout | length == 0
+
+- name: Pin ingress-nginx controller to Control Plane host ports
+  ansible.builtin.command: >-
+    /usr/local/bin/kubectl patch deployment {{ ingress_nginx_controller_name }}
+    --namespace {{ ingress_nginx_namespace }}
+    --type merge
+    --patch '{"spec":{"template":{"spec":{"hostNetwork":true,"dnsPolicy":"ClusterFirstWithHostNet","nodeSelector":{"kubernetes.io/hostname":"{{ ingress_nginx_node_hostname }}"}}}}}'
+  register: ingress_nginx_hostnetwork_patch
+  changed_when: "'patched' in ingress_nginx_hostnetwork_patch.stdout and 'no change' not in ingress_nginx_hostnetwork_patch.stdout"
+
+- name: Wait for ingress-nginx controller rollout
+  ansible.builtin.command: >-
+    /usr/local/bin/kubectl rollout status
+    deployment/{{ ingress_nginx_controller_name }}
+    --namespace {{ ingress_nginx_namespace }}
+    --timeout={{ ingress_nginx_wait_timeout }}
+  changed_when: false
+
+- name: Wait for ingress-nginx controller deployment to be Available
+  ansible.builtin.command: >-
+    /usr/local/bin/kubectl wait
+    --namespace {{ ingress_nginx_namespace }}
+    --for=condition=Available
+    deployment/{{ ingress_nginx_controller_name }}
+    --timeout={{ ingress_nginx_wait_timeout }}
+  changed_when: false
+
+- name: Wait for ingress-nginx controller pods to be Ready
+  ansible.builtin.command: >-
+    /usr/local/bin/kubectl wait
+    --namespace {{ ingress_nginx_namespace }}
+    --for=condition=Ready
+    pod
+    --selector {{ ingress_nginx_controller_selector }}
+    --timeout={{ ingress_nginx_wait_timeout }}
+  changed_when: false
+
+- name: Verify nginx IngressClass exists
+  ansible.builtin.command: "/usr/local/bin/kubectl get ingressclass {{ ingress_nginx_class_name }}"
+  changed_when: false
+
+- name: Read ingress-nginx Service type
+  ansible.builtin.command: >-
+    /usr/local/bin/kubectl get service {{ ingress_nginx_controller_name }}
+    --namespace {{ ingress_nginx_namespace }}
+    -o jsonpath={.spec.type}
+  register: ingress_nginx_service_type
+  changed_when: false
+
+- name: Ensure ingress-nginx Service is NodePort
+  ansible.builtin.assert:
+    that:
+      - ingress_nginx_service_type.stdout == "NodePort"
+    fail_msg: "Expected {{ ingress_nginx_controller_name }} Service to be NodePort, got {{ ingress_nginx_service_type.stdout }}."
+
+- name: Read ingress-nginx controller hostNetwork setting
+  ansible.builtin.command: >-
+    /usr/local/bin/kubectl get deployment {{ ingress_nginx_controller_name }}
+    --namespace {{ ingress_nginx_namespace }}
+    -o jsonpath={.spec.template.spec.hostNetwork}
+  register: ingress_nginx_hostnetwork
+  changed_when: false
+
+- name: Ensure ingress-nginx controller uses hostNetwork
+  ansible.builtin.assert:
+    that:
+      - ingress_nginx_hostnetwork.stdout == "true"
+    fail_msg: "Expected ingress-nginx controller to use hostNetwork for 192.168.56.10:80/443 exposure."
+
+- name: Wait for HTTP ingress port on Control Plane private IP
+  ansible.builtin.wait_for:
+    host: "{{ k3s_node_ip | default(ansible_host) }}"
+    port: 80
+    timeout: 120
+
+- name: Wait for HTTPS ingress port on Control Plane private IP
+  ansible.builtin.wait_for:
+    host: "{{ k3s_node_ip | default(ansible_host) }}"
+    port: 443
+    timeout: 120
+
+- name: Show ingress-nginx workload status
+  ansible.builtin.command: "/usr/local/bin/kubectl get pods,service --namespace {{ ingress_nginx_namespace }} -o wide"
+  register: ingress_nginx_status
+  changed_when: false
+
+- name: Print ingress-nginx workload status
   ansible.builtin.debug:
-    msg: "Fase futura: instalar Ingress Controller compatible con clase nginx."
+    var: ingress_nginx_status.stdout_lines
+
+- name: Show IngressClass status
+  ansible.builtin.command: "/usr/local/bin/kubectl get ingressclass {{ ingress_nginx_class_name }} -o wide"
+  register: ingress_nginx_class_status
+  changed_when: false
+
+- name: Print IngressClass status
+  ansible.builtin.debug:
+    var: ingress_nginx_class_status.stdout_lines

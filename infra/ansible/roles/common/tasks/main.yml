@@ -44,7 +44,7 @@
 - name: Disable swap for Kubernetes compatibility
   ansible.builtin.command: swapoff -a
   changed_when: false
-  when: ansible_swaptotal_mb | default(0) | int > 0
+  when: ansible_facts['swaptotal_mb'] | default(0) | int > 0
 
 - name: Remove active swap entries from fstab
   ansible.builtin.replace:
@@ -53,20 +53,14 @@
     replace: '# \1'
 
 - name: Check whether UFW is installed
-  ansible.builtin.command: command -v ufw
+  ansible.builtin.command: which ufw
   register: common_ufw_check
   changed_when: false
   failed_when: false
 
 - name: Allow required firewall ports if UFW is installed
   ansible.builtin.command: "ufw {{ item.rule }} {{ item.port }}/{{ item.proto }} comment '{{ item.comment }}'"
-  changed_when: "'Rule added' in common_ufw_rule.stdout"
+  changed_when: "'Rule added' in common_ufw_rule.stdout or 'Rules updated' in common_ufw_rule.stdout"
   register: common_ufw_rule
   loop: "{{ common_ufw_allowed_ports }}"
   when: common_ufw_check.rc == 0
-
-- name: Ensure open-iscsi service is enabled for future storage compatibility
-  ansible.builtin.service:
-    name: iscsid
-    enabled: true
-    state: started

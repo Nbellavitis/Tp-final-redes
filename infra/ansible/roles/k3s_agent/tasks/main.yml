@@ -29,7 +29,7 @@
 
 - name: Check whether K3s agent is already installed
   ansible.builtin.stat:
-    path: /usr/local/bin/k3s-agent
+    path: /usr/local/bin/k3s
   register: k3s_agent_binary
 
 - name: Download K3s installer
@@ -44,7 +44,7 @@
 - name: Install K3s agent
   ansible.builtin.command: "sh {{ k3s_agent_install_script_path }} agent"
   environment:
-    INSTALL_K3S_CHANNEL: "{{ k3s_channel }}"
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
   changed_when: true
   when: not k3s_agent_binary.stat.exists
 

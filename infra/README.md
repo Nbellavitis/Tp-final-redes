@@ -8,6 +8,8 @@ El alcance contractual es:
 - Ansible configura sistema operativo, firewall, K3s e Ingress.
 - La topologia inicial es 1 Control Plane y 2 Workers.
 - La red privada es `192.168.56.0/24`.
+- K3s queda pinneado a `v1.35.5+k3s1` para que el cluster sea reproducible.
+- El Ingress Controller es `ingress-nginx` pinneado a `controller-v1.13.1` y expuesto en `192.168.56.10:80/443`.
 - The Store se despliega sobre Kubernetes usando los manifiestos del repo.
 
 ## Estructura
@@ -86,3 +88,5 @@ cd "C:\Users\nico\Desktop\ITBA\Redes\Tp-final\infra"
 $env:VAGRANT_EXPOSE_SSH="true"
 vagrant reload
 ```
+
+Este modo alternativo expone SSH para Ansible, no el API Server de Kubernetes. Si WSL no tiene ruta a `192.168.56.0/24`, el kubeconfig exportado no funcionara desde WSL; validar con `vagrant ssh k3s-control -c 'sudo kubectl ...'` o usar `kubectl` desde un host con acceso a la red host-only.
