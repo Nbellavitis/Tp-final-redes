@@ -1,4 +1,62 @@
 ---
-- name: Phase 0 placeholder for local image import
+- name: Check local The Store image archive exists
+  ansible.builtin.stat:
+    path: "{{ the_store_images_local_archive }}"
+  register: the_store_images_local_archive_stat
+  delegate_to: localhost
+  become: false
+
+- name: Ensure local The Store image archive is available
+  ansible.builtin.assert:
+    that:
+      - the_store_images_local_archive_stat.stat.exists
+      - the_store_images_local_archive_stat.stat.isreg | default(false)
+    fail_msg: >-
+      Local image archive {{ the_store_images_local_archive }} is missing.
+      Run scripts/export-images.sh from the repo root before importing images into K3s.
+
+- name: Ensure K3s binary exists before importing images
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: the_store_images_k3s_binary
+
+- name: Ensure K3s is installed on this node
+  ansible.builtin.assert:
+    that:
+      - the_store_images_k3s_binary.stat.exists
+    fail_msg: "K3s is not installed on {{ inventory_hostname }}. Run the K3s roles before importing images."
+
+- name: Copy The Store image archive to node
+  ansible.builtin.copy:
+    src: "{{ the_store_images_local_archive }}"
+    dest: "{{ the_store_images_remote_archive }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Check imported The Store images
+  ansible.builtin.command: "/bin/sh -c '/usr/local/bin/k3s ctr images list --quiet | grep -F {{ item | quote }}'"
+  register: the_store_images_imported_check
+  changed_when: false
+  failed_when: false
+  loop: "{{ the_store_images_expected }}"
+
+- name: Import The Store images into K3s containerd
+  ansible.builtin.command: "/usr/local/bin/k3s ctr images import {{ the_store_images_remote_archive }}"
+  register: the_store_images_import
+  changed_when: true
+  when: the_store_images_imported_check.results | selectattr('rc', 'ne', 0) | list | length > 0
+
+- name: Verify The Store images are available in K3s containerd
+  ansible.builtin.command: "/bin/sh -c '/usr/local/bin/k3s ctr images list --quiet | grep -F {{ item | quote }}'"
+  changed_when: false
+  loop: "{{ the_store_images_expected }}"
+
+- name: Show imported The Store images
+  ansible.builtin.command: "/bin/sh -c '/usr/local/bin/k3s ctr images list --quiet | grep -F the-store-'"
+  register: the_store_images_status
+  changed_when: false
+
+- name: Print imported The Store images
   ansible.builtin.debug:
-    msg: "Fase futura: copiar e importar imagenes the-store-* en containerd de K3s."
+    var: the_store_images_status.stdout_lines

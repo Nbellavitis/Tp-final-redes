@@ -2,12 +2,18 @@
 - name: Prepare The Store images for K3s
   hosts: k3s_cluster
   become: true
+  tags:
+    - images
+    - the_store_images
   roles:
     - the_store_images
 
 - name: Deploy The Store manifests
   hosts: control_plane
   become: true
+  tags:
+    - deploy
+    - store_deploy
   tasks:
     - name: Placeholder for The Store deployment
       ansible.builtin.debug:

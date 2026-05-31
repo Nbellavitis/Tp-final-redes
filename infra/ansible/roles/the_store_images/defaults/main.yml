@@ -1,0 +1,9 @@
+---
+the_store_images_local_archive: /tmp/the-store-images.tar
+the_store_images_remote_archive: /tmp/the-store-images.tar
+the_store_images_expected:
+  - the-store-catalog:latest
+  - the-store-cart:latest
+  - the-store-checkout:latest
+  - the-store-orders:latest
+  - the-store-ui:latest

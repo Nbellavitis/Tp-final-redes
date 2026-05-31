@@ -24,19 +24,23 @@ Fase 6 completada a nivel implementacion: el rol `k3s_kubeconfig` exporta `infra
 
 Fase 7 completada a nivel implementacion: el rol `ingress` instala `ingress-nginx` compatible con la clase `nginx` del manifiesto de The Store y valida que el controller quede listo.
 
-| Imagen | ID | Tamano aproximado |
-| --- | --- | --- |
-| `the-store-catalog:latest` | `22ad6f00cbad` | 292 MB |
-| `the-store-cart:latest` | `92dc0e42eb01` | 788 MB |
-| `the-store-checkout:latest` | `ce362f04d97b` | 984 MB |
-| `the-store-orders:latest` | `25e8cdb0556f` | 1.08 GB |
-| `the-store-ui:latest` | `1d6caec3d867` | 1.07 GB |
+Fase 8 implementada y validada: el rol `the_store_images` copia e importa el archivo de imagenes exportado en todos los nodos K3s.
+
+Tags de imagen esperados:
+
+- `the-store-catalog:latest`
+- `the-store-cart:latest`
+- `the-store-checkout:latest`
+- `the-store-orders:latest`
+- `the-store-ui:latest`
 
 Comando usado:
 
 ```bash
 bash scripts/build-images.sh
 ```
+
+Nota: los Dockerfiles Java ejecutan `chmod +x ./mvnw` durante el build para que el wrapper funcione aunque el checkout local no preserve el bit ejecutable.
 
 Topologia Vagrant inicial:
 
@@ -57,9 +61,8 @@ vagrant status
 
 Las fases siguientes completaran:
 
-1. Distribucion de imagenes.
-2. Deploy de The Store.
-3. Alta de un nuevo Worker.
+1. Deploy de The Store.
+2. Alta de un nuevo Worker.
 
 ## Fase 3: Ansible base
 
@@ -303,6 +306,50 @@ Resultado esperado:
 ingress-nginx-controller   Ready/Running
 ingress-nginx-controller   NodePort
 nginx                      IngressClass
+```
+
+## Fase 8: Distribucion de imagenes
+
+El rol `the_store_images` distribuye las imagenes locales de The Store a containerd de K3s:
+
+- Usa por defecto el archivo local `/tmp/the-store-images.tar`.
+- Copia el tar a `/tmp/the-store-images.tar` en cada nodo.
+- Importa las imagenes con `k3s ctr images import`.
+- Ejecuta la importacion solo si falta alguna imagen esperada.
+- Verifica las cinco imagenes `the-store-*` en cada nodo para evitar `ImagePullBackOff`.
+
+Archivos implementados:
+
+- `scripts/export-images.sh`
+- `infra/ansible/roles/the_store_images/defaults/main.yml`
+- `infra/ansible/roles/the_store_images/tasks/main.yml`
+- `infra/ansible/playbooks/deploy-store.yml`
+
+Desde la raiz del repo, exportar las imagenes:
+
+```bash
+bash scripts/export-images.sh
+```
+
+Luego importar en todos los nodos K3s:
+
+```bash
+cd infra/ansible
+ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml --tags images
+```
+
+Si se usa otra ubicacion para el tar:
+
+```bash
+ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml --tags images -e the_store_images_local_archive=/ruta/the-store-images.tar
+```
+
+Validacion esperada:
+
+```bash
+vagrant ssh k3s-control -c 'sudo k3s ctr images list | grep the-store'
+vagrant ssh k3s-worker-1 -c 'sudo k3s ctr images list | grep the-store'
+vagrant ssh k3s-worker-2 -c 'sudo k3s ctr images list | grep the-store'
 ```
 
 ## Referencia principal

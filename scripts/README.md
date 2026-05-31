@@ -7,6 +7,6 @@ Estos scripts no reemplazan a Ansible. Su objetivo es reducir errores operativos
 ## Scripts previstos
 
 - `build-images.sh`: construye las imagenes locales de The Store.
-- `export-images.sh`: exporta las imagenes para importarlas en K3s.
+- `export-images.sh`: exporta las imagenes a `/tmp/the-store-images.tar` para importarlas en K3s.
 - `deploy-store.sh`: aplica los manifiestos de The Store.
 - `status.sh`: muestra estado compacto del cluster y la aplicacion.

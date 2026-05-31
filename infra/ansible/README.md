@@ -31,7 +31,7 @@ ansible-playbook playbooks/site.yml --tags common
 - `k3s_cluster_validation`: validacion de nodos `Ready` desde el Control Plane.
 - `k3s_kubeconfig`: exportacion de kubeconfig para operar desde el host.
 - `ingress`: instalacion y validacion de `ingress-nginx`.
-- `the_store_images`: distribucion/importacion de imagenes locales.
+- `the_store_images`: distribucion/importacion de imagenes locales en containerd de K3s.
 
 K3s se instala con version pinneada `v1.35.5+k3s1` en server y agents para evitar que una re-ejecucion o un worker agregado mas adelante tome una version distinta del canal `stable`.
 
@@ -97,6 +97,26 @@ Validacion:
 kubectl get pods -n ingress-nginx
 kubectl get svc -n ingress-nginx
 kubectl get ingressclass nginx
+```
+
+### Fase 8: imagenes de The Store
+
+Desde la raiz del repo:
+
+```bash
+bash scripts/export-images.sh
+```
+
+Desde `infra/ansible`:
+
+```bash
+ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml --tags images
+```
+
+Validacion:
+
+```bash
+ansible -i inventory/hosts.yml k3s_cluster -b -m command -a "/usr/local/bin/k3s ctr images list"
 ```
 
 ## Ejecucion por plataforma
