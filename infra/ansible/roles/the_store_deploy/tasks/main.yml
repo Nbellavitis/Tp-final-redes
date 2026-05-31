@@ -1,0 +1,162 @@
+---
+- name: Check local The Store Kubernetes manifest exists
+  ansible.builtin.stat:
+    path: "{{ the_store_manifest_local_path }}"
+  register: the_store_manifest_local_stat
+  delegate_to: localhost
+  become: false
+
+- name: Ensure local The Store Kubernetes manifest is available
+  ansible.builtin.assert:
+    that:
+      - the_store_manifest_local_stat.stat.exists
+      - the_store_manifest_local_stat.stat.isreg | default(false)
+    fail_msg: "The Store manifest {{ the_store_manifest_local_path }} is missing."
+
+- name: Ensure K3s binary exists before deploying The Store
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: the_store_deploy_k3s_binary
+
+- name: Ensure K3s is installed on the Control Plane
+  ansible.builtin.assert:
+    that:
+      - the_store_deploy_k3s_binary.stat.exists
+    fail_msg: "K3s is not installed on {{ inventory_hostname }}. Run the K3s roles before deploying The Store."
+
+- name: Ensure Kubernetes API is available before deploying The Store
+  ansible.builtin.command: /usr/local/bin/kubectl get nodes
+  register: the_store_deploy_kubectl_nodes
+  changed_when: false
+  retries: 20
+  delay: 6
+  until: the_store_deploy_kubectl_nodes.rc == 0
+
+- name: Check whether The Store namespace exists
+  ansible.builtin.command: "/usr/local/bin/kubectl get namespace {{ the_store_namespace }}"
+  register: the_store_namespace_check
+  changed_when: false
+  failed_when: false
+
+- name: Create The Store namespace
+  ansible.builtin.command: "/usr/local/bin/kubectl create namespace {{ the_store_namespace }}"
+  changed_when: true
+  when: the_store_namespace_check.rc != 0
+
+- name: Copy The Store Kubernetes manifest to Control Plane
+  ansible.builtin.copy:
+    src: "{{ the_store_manifest_local_path }}"
+    dest: "{{ the_store_manifest_remote_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply The Store manifests
+  ansible.builtin.command: >-
+    /usr/local/bin/kubectl apply
+    --namespace {{ the_store_namespace }}
+    --filename {{ the_store_manifest_remote_path }}
+  register: the_store_apply
+  changed_when: "'created' in the_store_apply.stdout or 'configured' in the_store_apply.stdout"
+
+- name: Remove unused RabbitMQ Secret for in-memory POC
+  ansible.builtin.command: "/usr/local/bin/kubectl delete secret orders-rabbitmq --namespace {{ the_store_namespace }} --ignore-not-found"
+  register: the_store_rabbitmq_secret_delete
+  changed_when: "'deleted' in the_store_rabbitmq_secret_delete.stdout"
+
+- name: Wait for The Store deployments to be Available
+  ansible.builtin.command: >-
+    /usr/local/bin/kubectl wait
+    --namespace {{ the_store_namespace }}
+    --for=condition=Available
+    deployments
+    --all
+    --timeout={{ the_store_wait_timeout }}
+  changed_when: false
+
+- name: Wait for The Store pods to be Ready
+  ansible.builtin.command: >-
+    /usr/local/bin/kubectl wait
+    --namespace {{ the_store_namespace }}
+    --for=condition=Ready
+    pods
+    --all
+    --timeout={{ the_store_wait_timeout }}
+  changed_when: false
+
+- name: Verify expected The Store deployments exist
+  ansible.builtin.command: "/usr/local/bin/kubectl get deployment {{ item }} --namespace {{ the_store_namespace }}"
+  changed_when: false
+  loop: "{{ the_store_expected_deployments }}"
+
+- name: Read The Store Ingress host
+  ansible.builtin.command: >-
+    /usr/local/bin/kubectl get ingress {{ the_store_ingress_name }}
+    --namespace {{ the_store_namespace }}
+    -o jsonpath='{.spec.rules[0].host}'
+  register: the_store_ingress_host_status
+  changed_when: false
+
+- name: Ensure The Store Ingress host matches the POC access path
+  ansible.builtin.assert:
+    that:
+      - the_store_ingress_host_status.stdout == the_store_ingress_host
+    fail_msg: >-
+      Expected Ingress host {{ the_store_ingress_host }},
+      got {{ the_store_ingress_host_status.stdout }}.
+
+- name: Read The Store Ingress class annotation
+  ansible.builtin.command: >-
+    /usr/local/bin/kubectl get ingress {{ the_store_ingress_name }}
+    --namespace {{ the_store_namespace }}
+    -o jsonpath='{.metadata.annotations.kubernetes\.io/ingress\.class}'
+  register: the_store_ingress_class_status
+  changed_when: false
+
+- name: Ensure The Store Ingress uses nginx
+  ansible.builtin.assert:
+    that:
+      - the_store_ingress_class_status.stdout == the_store_ingress_class
+    fail_msg: >-
+      Expected Ingress class {{ the_store_ingress_class }},
+      got {{ the_store_ingress_class_status.stdout }}.
+
+- name: Validate The Store UI through ingress
+  ansible.builtin.uri:
+    url: "{{ the_store_ingress_url }}"
+    headers:
+      Host: "{{ the_store_ingress_host }}"
+    status_code: 200
+    return_content: false
+    timeout: 30
+  register: the_store_ingress_http_check
+  retries: 20
+  delay: 6
+  until: the_store_ingress_http_check.status == 200
+
+- name: Show The Store pods
+  ansible.builtin.command: "/usr/local/bin/kubectl get pods --namespace {{ the_store_namespace }} -o wide"
+  register: the_store_pods_status
+  changed_when: false
+
+- name: Print The Store pods
+  ansible.builtin.debug:
+    var: the_store_pods_status.stdout_lines
+
+- name: Show The Store services
+  ansible.builtin.command: "/usr/local/bin/kubectl get services --namespace {{ the_store_namespace }} -o wide"
+  register: the_store_services_status
+  changed_when: false
+
+- name: Print The Store services
+  ansible.builtin.debug:
+    var: the_store_services_status.stdout_lines
+
+- name: Show The Store ingress
+  ansible.builtin.command: "/usr/local/bin/kubectl get ingress --namespace {{ the_store_namespace }} -o wide"
+  register: the_store_ingress_status
+  changed_when: false
+
+- name: Print The Store ingress
+  ansible.builtin.debug:
+    var: the_store_ingress_status.stdout_lines

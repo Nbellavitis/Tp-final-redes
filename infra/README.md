@@ -9,6 +9,7 @@ El alcance contractual es:
 - La topologia inicial es 1 Control Plane y 2 Workers.
 - La red privada es `192.168.56.0/24`.
 - K3s queda pinneado a `v1.35.5+k3s1` para que el cluster sea reproducible.
+- Flannel VXLAN usa la interfaz host-only `eth1` para transportar Pods sobre `192.168.56.0/24`.
 - El Ingress Controller es `ingress-nginx` pinneado a `controller-v1.13.1` y expuesto en `192.168.56.10:80/443`.
 - The Store se despliega sobre Kubernetes usando los manifiestos del repo.
 
@@ -28,8 +29,11 @@ infra/
       common/
       k3s_server/
       k3s_agent/
+      k3s_cluster_validation/
+      k3s_kubeconfig/
       ingress/
       the_store_images/
+      the_store_deploy/
 ```
 
 La implementacion se completa de forma incremental siguiendo `docs/plan-ejecucion-k3s-the-store.md`.

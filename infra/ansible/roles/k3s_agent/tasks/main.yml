@@ -24,6 +24,7 @@
       server: "{{ k3s_server_url }}"
       token: "{{ hostvars[k3s_control_plane_host].k3s_server_node_token }}"
       node-ip: "{{ k3s_agent_node_ip }}"
+      flannel-iface: "{{ k3s_flannel_iface }}"
   notify: Restart k3s-agent
   no_log: true
 

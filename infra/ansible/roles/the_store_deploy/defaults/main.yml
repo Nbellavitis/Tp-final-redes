@@ -1,0 +1,15 @@
+---
+the_store_namespace: the-store
+the_store_manifest_local_path: "{{ playbook_dir }}/../../../dist/kubernetes.yaml"
+the_store_manifest_remote_path: /tmp/the-store-kubernetes.yaml
+the_store_wait_timeout: 300s
+the_store_ingress_name: ui
+the_store_ingress_host: localhost
+the_store_ingress_class: nginx
+the_store_ingress_url: "http://{{ k3s_node_ip | default(ansible_host) }}/"
+the_store_expected_deployments:
+  - catalog
+  - carts
+  - checkout
+  - orders
+  - ui

@@ -21,6 +21,7 @@
       cluster-cidr: "{{ k3s_pod_cidr }}"
       service-cidr: "{{ k3s_service_cidr }}"
       flannel-backend: "{{ k3s_flannel_backend }}"
+      flannel-iface: "{{ k3s_flannel_iface }}"
       write-kubeconfig-mode: "0644"
       disable:
       {% for component in k3s_disable_components %}

@@ -14,7 +14,5 @@
   tags:
     - deploy
     - store_deploy
-  tasks:
-    - name: Placeholder for The Store deployment
-      ansible.builtin.debug:
-        msg: "Fase futura: aplicar dist/kubernetes.yaml en namespace the-store."
+  roles:
+    - the_store_deploy

@@ -32,8 +32,11 @@ ansible-playbook playbooks/site.yml --tags common
 - `k3s_kubeconfig`: exportacion de kubeconfig para operar desde el host.
 - `ingress`: instalacion y validacion de `ingress-nginx`.
 - `the_store_images`: distribucion/importacion de imagenes locales en containerd de K3s.
+- `the_store_deploy`: despliegue y validacion inicial de The Store.
 
 K3s se instala con version pinneada `v1.35.5+k3s1` en server y agents para evitar que una re-ejecucion o un worker agregado mas adelante tome una version distinta del canal `stable`.
+
+Flannel se fija a `eth1` para que VXLAN use la red host-only `192.168.56.0/24`. En VirtualBox, la interfaz NAT suele exponer `10.0.2.15` en todas las VMs, por lo que no debe ser la IP publica de Flannel.
 
 `ingress-nginx` se instala con version pinneada `controller-v1.13.1`, manifiesto `provider/baremetal` y controller con `hostNetwork` en `k3s-control` para exponer HTTP/HTTPS por `192.168.56.10`.
 
@@ -117,6 +120,23 @@ Validacion:
 
 ```bash
 ansible -i inventory/hosts.yml k3s_cluster -b -m command -a "/usr/local/bin/k3s ctr images list"
+```
+
+### Fase 9: deploy de The Store
+
+Desde `infra/ansible`:
+
+```bash
+ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml --tags deploy
+```
+
+Validacion:
+
+```bash
+kubectl --kubeconfig ../kubeconfig get pods -n the-store -o wide
+kubectl --kubeconfig ../kubeconfig get svc -n the-store
+kubectl --kubeconfig ../kubeconfig get ingress -n the-store
+curl -H 'Host: localhost' http://192.168.56.10/
 ```
 
 ## Ejecucion por plataforma

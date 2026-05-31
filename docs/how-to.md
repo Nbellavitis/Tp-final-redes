@@ -26,6 +26,8 @@ Fase 7 completada a nivel implementacion: el rol `ingress` instala `ingress-ngin
 
 Fase 8 implementada y validada: el rol `the_store_images` copia e importa el archivo de imagenes exportado en todos los nodos K3s.
 
+Fase 9 implementada y validada: el rol `the_store_deploy` aplica The Store en namespace `the-store`, espera deployments/pods listos y valida acceso HTTP por Ingress.
+
 Tags de imagen esperados:
 
 - `the-store-catalog:latest`
@@ -61,7 +63,7 @@ vagrant status
 
 Las fases siguientes completaran:
 
-1. Deploy de The Store.
+1. Validacion funcional de The Store.
 2. Alta de un nuevo Worker.
 
 ## Fase 3: Ansible base
@@ -133,6 +135,7 @@ El rol `k3s_server` instala K3s server en `k3s-control` y configura:
 - Pod CIDR: `10.42.0.0/16`.
 - Service CIDR: `10.43.0.0/16`.
 - Flannel backend: `vxlan`.
+- Flannel iface: `eth1`, para que VXLAN use la red host-only `192.168.56.0/24` y no la NAT duplicada de VirtualBox.
 - Kubeconfig legible en `/etc/rancher/k3s/k3s.yaml`.
 - Traefik deshabilitado para instalar luego un Ingress Controller `nginx` compatible con `dist/kubernetes.yaml`.
 - Token de join disponible como fact de Ansible para la fase de Workers.
@@ -350,6 +353,43 @@ Validacion esperada:
 vagrant ssh k3s-control -c 'sudo k3s ctr images list | grep the-store'
 vagrant ssh k3s-worker-1 -c 'sudo k3s ctr images list | grep the-store'
 vagrant ssh k3s-worker-2 -c 'sudo k3s ctr images list | grep the-store'
+```
+
+## Fase 9: Deploy de The Store
+
+El rol `the_store_deploy` despliega la aplicacion sobre el cluster K3s ya operativo:
+
+- Crea el namespace `the-store` si no existe.
+- Copia `dist/kubernetes.yaml` al Control Plane.
+- Aplica los manifiestos con `kubectl apply -n the-store`.
+- Mantiene persistencia `in-memory` segun el alcance del POC.
+- Espera deployments `Available` y pods `Ready`.
+- Verifica los deployments `catalog`, `carts`, `checkout`, `orders` y `ui`.
+- Valida el Ingress `ui` con host `localhost` y clase `nginx`.
+- Prueba HTTP por `http://192.168.56.10/` enviando `Host: localhost`.
+
+Nota: el Secret vacio `orders-rabbitmq` se omitio del manifiesto local porque el POC usa mensajeria `in-memory` y ese recurso no es referenciado por el deployment `orders`.
+
+Archivos implementados:
+
+- `infra/ansible/roles/the_store_deploy/defaults/main.yml`
+- `infra/ansible/roles/the_store_deploy/tasks/main.yml`
+- `infra/ansible/playbooks/deploy-store.yml`
+- `dist/kubernetes.yaml`
+
+Desde `infra/ansible`:
+
+```bash
+ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml --tags deploy
+```
+
+Validacion esperada:
+
+```bash
+kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
+kubectl --kubeconfig infra/kubeconfig get svc -n the-store
+kubectl --kubeconfig infra/kubeconfig get ingress -n the-store
+curl -H 'Host: localhost' http://192.168.56.10/
 ```
 
 ## Referencia principal
