@@ -160,14 +160,16 @@ vagrant up k3s-worker-3
 Desde `infra/ansible`, unir el nodo al cluster:
 
 ```bash
-ansible-playbook -i inventory/hosts.yml playbooks/site.yml --tags common,k3s_server,k3s_agent,k3s_validation,kubeconfig
+ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3
 ```
 
 Como The Store usa imagenes locales importadas en containerd, importar tambien el tar en el nodo nuevo antes de reiniciar deployments:
 
 ```bash
-ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml --tags images
+ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3 -e import_store_images=true --tags images
 ```
+
+No usar `--limit k3s-worker-3` para este playbook: necesita ejecutar tambien el play del Control Plane para leer el token de join.
 
 Validacion:
 

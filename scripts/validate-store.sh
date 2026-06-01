@@ -20,11 +20,11 @@ EOF
 }
 
 log() {
-  printf '[phase10] %s\n' "$1"
+  printf '[store-validation] %s\n' "$1"
 }
 
 fail() {
-  printf '[phase10] ERROR: %s\n' "$1" >&2
+  printf '[store-validation] ERROR: %s\n' "$1" >&2
   exit 1
 }
 
