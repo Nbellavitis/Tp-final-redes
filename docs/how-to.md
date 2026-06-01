@@ -367,6 +367,7 @@ El rol `the_store_deploy` despliega la aplicacion sobre el cluster K3s ya operat
 - Verifica los deployments `catalog`, `carts`, `checkout`, `orders` y `ui`.
 - Valida el Ingress `ui` con host `localhost` y clase `nginx`.
 - Prueba HTTP por `http://192.168.56.10/` enviando `Host: localhost`.
+- Configura `checkout` con `RETAIL_CHECKOUT_ENDPOINTS_ORDERS=http://orders` para que la orden final use el servicio `orders` real.
 
 Nota: el Secret vacio `orders-rabbitmq` se omitio del manifiesto local porque el POC usa mensajeria `in-memory` y ese recurso no es referenciado por el deployment `orders`.
 
@@ -390,6 +391,47 @@ kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
 kubectl --kubeconfig infra/kubeconfig get svc -n the-store
 kubectl --kubeconfig infra/kubeconfig get ingress -n the-store
 curl -H 'Host: localhost' http://192.168.56.10/
+```
+
+## Fase 10: Validacion funcional de The Store
+
+La fase 10 valida que la aplicacion funcione de punta a punta, no solo que los pods esten `Running`.
+
+El script `scripts/validate-store.sh` ejecuta este flujo por HTTP contra el Ingress:
+
+- abre la home;
+- valida la topologia de servicios `catalog`, `carts`, `checkout` y `orders`;
+- valida el catalogo;
+- entra al detalle de un producto;
+- agrega el producto al carrito;
+- completa shipping, delivery y payment;
+- confirma la orden final.
+
+Desde la raiz del repo:
+
+```bash
+bash scripts/validate-store.sh
+```
+
+Valores por defecto:
+
+- URL: `http://192.168.56.10`
+- Host header: `localhost`
+
+Si se cambia el host del Ingress o el endpoint:
+
+```bash
+bash scripts/validate-store.sh --url http://192.168.56.10 --host localhost
+```
+
+Logs utiles para evidenciar comunicacion entre servicios:
+
+```bash
+kubectl --kubeconfig infra/kubeconfig logs -n the-store deploy/ui --tail=100
+kubectl --kubeconfig infra/kubeconfig logs -n the-store deploy/catalog --tail=100
+kubectl --kubeconfig infra/kubeconfig logs -n the-store deploy/carts --tail=100
+kubectl --kubeconfig infra/kubeconfig logs -n the-store deploy/checkout --tail=100
+kubectl --kubeconfig infra/kubeconfig logs -n the-store deploy/orders --tail=100
 ```
 
 ## Referencia principal

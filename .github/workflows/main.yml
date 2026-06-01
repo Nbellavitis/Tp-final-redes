@@ -1,13 +1,26 @@
 name: Deploy services to local cluster
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
     paths:
       - 'src/**'
+      - 'dist/**'
       - 'local.sh'
       - '.github/workflows/main.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'dist/**'
+      - 'local.sh'
+      - '.github/workflows/main.yml'
+
+permissions:
+  contents: read
 
 jobs:
   deploy:
@@ -16,14 +29,11 @@ jobs:
         os: [ubuntu-latest]
     name: On ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 60
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Set up Docker
-      uses: docker/setup-docker-action@v4
 
     - name: Set up Kind
       uses: helm/kind-action@v1
@@ -32,20 +42,27 @@ jobs:
 
     - name: Create Kind cluster and deploy services
       run: |
-        ./local.sh create-cluster --skip-tests --skip-status
+        bash ./local.sh create-cluster --skip-tests --skip-status
 
     - name: Check status
       run: |
-        ./local.sh status
+        bash ./local.sh status
 
     - name: Run E2E tests
       run: |
-        ./local.sh e2e-test
+        bash ./local.sh e2e-test
 
     - name: Clean up cluster
+      if: always()
       run: |
-        ./local.sh delete-cluster
-        if kind get clusters | grep -q .; then
+        if ! command -v kind >/dev/null 2>&1; then
+          echo "kind is not installed; skipping cleanup"
+          exit 0
+        fi
+
+        kind delete cluster --name the-store || true
+
+        if kind get clusters | grep -Fxq 'the-store'; then
           echo "ERROR: Clusters still exist after cleanup"
           exit 1
         fi

@@ -139,6 +139,16 @@ kubectl --kubeconfig ../kubeconfig get ingress -n the-store
 curl -H 'Host: localhost' http://192.168.56.10/
 ```
 
+### Fase 10: validacion funcional
+
+Desde la raiz del repositorio:
+
+```bash
+bash scripts/validate-store.sh
+```
+
+El script usa por defecto `http://192.168.56.10` con header `Host: localhost`, valida la topologia de servicios y recorre catalogo, detalle de producto, carrito, checkout y orden final.
+
 ## Ejecucion por plataforma
 
 ### macOS, Linux o Windows con acceso directo a host-only

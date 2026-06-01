@@ -59,6 +59,21 @@
   register: the_store_apply
   changed_when: "'created' in the_store_apply.stdout or 'configured' in the_store_apply.stdout"
 
+- name: Restart checkout when its ConfigMap changes
+  ansible.builtin.command: "/usr/local/bin/kubectl rollout restart deployment/checkout --namespace {{ the_store_namespace }}"
+  register: the_store_checkout_restart
+  changed_when: true
+  when: "'configmap/checkout configured' in the_store_apply.stdout"
+
+- name: Wait for checkout rollout after ConfigMap change
+  ansible.builtin.command: >-
+    /usr/local/bin/kubectl rollout status
+    deployment/checkout
+    --namespace {{ the_store_namespace }}
+    --timeout={{ the_store_wait_timeout }}
+  changed_when: false
+  when: the_store_checkout_restart is changed
+
 - name: Remove unused RabbitMQ Secret for in-memory POC
   ansible.builtin.command: "/usr/local/bin/kubectl delete secret orders-rabbitmq --namespace {{ the_store_namespace }} --ignore-not-found"
   register: the_store_rabbitmq_secret_delete

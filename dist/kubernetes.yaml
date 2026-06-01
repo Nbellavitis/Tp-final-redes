@@ -399,6 +399,7 @@ kind: ConfigMap
 metadata:
   name: checkout
 data:
+  RETAIL_CHECKOUT_ENDPOINTS_ORDERS: http://orders
   RETAIL_CHECKOUT_PERSISTENCE_PROVIDER: in-memory
 ---
 # Source: retail-store-sample-checkout-chart/templates/service.yaml

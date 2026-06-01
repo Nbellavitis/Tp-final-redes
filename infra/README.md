@@ -12,6 +12,7 @@ El alcance contractual es:
 - Flannel VXLAN usa la interfaz host-only `eth1` para transportar Pods sobre `192.168.56.0/24`.
 - El Ingress Controller es `ingress-nginx` pinneado a `controller-v1.13.1` y expuesto en `192.168.56.10:80/443`.
 - The Store se despliega sobre Kubernetes usando los manifiestos del repo.
+- La validacion funcional de fase 10 se ejecuta con `scripts/validate-store.sh` contra el Ingress `192.168.56.10` usando `Host: localhost`.
 
 ## Estructura
 
