@@ -2,6 +2,29 @@
 
 Documento operativo para reproducir el POC.
 
+## Prerrequisitos
+
+Host recomendado:
+
+- VirtualBox.
+- Vagrant.
+- Ansible.
+- Docker.
+- `kubectl`.
+- `curl`, `bash` y Ruby del sistema para validaciones estaticas.
+- Al menos 8 GB de RAM libres para correr 4 VMs durante la fase 11.
+
+El POC usa:
+
+- Ubuntu Server 24.04 LTS en VMs Vagrant.
+- K3s `v1.35.5+k3s1`.
+- Red host-only `192.168.56.0/24`.
+- Pod CIDR `10.42.0.0/16`.
+- Service CIDR `10.43.0.0/16`.
+- Flannel VXLAN por `eth1`.
+- Traefik deshabilitado.
+- Ingress con `ingress-nginx`.
+
 ## Estado
 
 Fase 0 completada: estructura inicial del proyecto.
@@ -72,6 +95,67 @@ vagrant status
 ```
 
 Para una demo incremental, levantar primero los tres nodos base y luego agregar `k3s-worker-3` en la fase 11.
+
+## Flujo rapido reproducible
+
+Desde la raiz del repositorio:
+
+```bash
+bash scripts/build-images.sh
+bash scripts/export-images.sh
+```
+
+Levantar las VMs base:
+
+```bash
+cd infra
+vagrant validate
+vagrant up k3s-control k3s-worker-1 k3s-worker-2
+cd ..
+```
+
+Configurar K3s, kubeconfig e Ingress:
+
+```bash
+cd infra/ansible
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml
+cd ../..
+```
+
+Importar imagenes y desplegar The Store:
+
+```bash
+cd infra/ansible
+ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml
+cd ../..
+```
+
+Validar estado y flujo funcional:
+
+```bash
+export KUBECONFIG="$PWD/infra/kubeconfig"
+bash scripts/status.sh
+bash scripts/validate-store.sh
+```
+
+Agregar `worker-3`:
+
+```bash
+cd infra
+vagrant up k3s-worker-3
+cd ansible
+ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3
+ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3 -e import_store_images=true --tags images
+cd ../..
+```
+
+Demostrar scheduling sobre el nuevo nodo:
+
+```bash
+kubectl --kubeconfig infra/kubeconfig rollout restart deployment -n the-store
+kubectl --kubeconfig infra/kubeconfig rollout status deployment -n the-store --timeout=300s
+kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
+```
 
 ## Fase 3: Ansible base
 
@@ -481,6 +565,133 @@ kubectl --kubeconfig infra/kubeconfig rollout restart deployment -n the-store
 kubectl --kubeconfig infra/kubeconfig rollout status deployment -n the-store --timeout=300s
 kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
 ```
+
+## Troubleshooting basico
+
+### Vagrant queda esperando SSH
+
+Revisar estado de las VMs:
+
+```bash
+cd infra
+vagrant status
+```
+
+Si una VM queda pausada, reanudarla:
+
+```bash
+vagrant resume
+```
+
+Si hace falta inspeccion visual en VirtualBox:
+
+```bash
+VAGRANT_GUI=true vagrant up k3s-control
+```
+
+### Ansible no llega por SSH
+
+Validar conectividad:
+
+```bash
+cd infra/ansible
+ansible -i inventory/hosts.yml k3s_cluster -m ping
+```
+
+Si se ejecuta desde WSL y no hay ruta a `192.168.56.0/24`, usar `inventory/hosts-wsl.yml` y preparar claves:
+
+```bash
+bash scripts/prepare-wsl-keys.sh
+export NAT_SSH_HOST="$(awk '/nameserver/ {print $2; exit}' /etc/resolv.conf)"
+ansible -i inventory/hosts-wsl.yml k3s_cluster -m ping
+```
+
+### `kubectl` desde WSL no conecta
+
+El kubeconfig apunta a `https://192.168.56.10:6443`. Si WSL no tiene ruta a la red host-only, validar desde el Control Plane:
+
+```bash
+cd infra
+vagrant ssh k3s-control -c 'sudo kubectl get nodes -o wide'
+```
+
+O usar `kubectl` desde un host con acceso a `192.168.56.0/24`.
+
+### Pods en `ImagePullBackOff`
+
+The Store usa imagenes locales. Reexportar e importar:
+
+```bash
+bash scripts/export-images.sh
+cd infra/ansible
+ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml --tags images
+```
+
+Si el problema ocurre despues de agregar `worker-3`:
+
+```bash
+ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3 -e import_store_images=true --tags images
+```
+
+### Ingress no responde
+
+Validar controller e Ingress:
+
+```bash
+kubectl --kubeconfig infra/kubeconfig get pods -n ingress-nginx
+kubectl --kubeconfig infra/kubeconfig get ingress -n the-store -o wide
+curl -H 'Host: localhost' http://192.168.56.10/
+```
+
+### Cambios de ConfigMap no impactan en pods
+
+Kubernetes no reinicia pods automaticamente cuando cambia un ConfigMap consumido por `envFrom`. El rol `the_store_deploy` y `scripts/deploy-store.sh` reinician `checkout` si cambia su ConfigMap.
+
+## Limpieza
+
+Apagar VMs sin destruirlas:
+
+```bash
+cd infra
+vagrant halt
+```
+
+Destruir el entorno completo:
+
+```bash
+cd infra
+vagrant destroy -f
+```
+
+Limpiar artefactos locales opcionales:
+
+Desde la raiz del repo:
+
+```bash
+rm -f /tmp/the-store-images.tar
+rm -f infra/kubeconfig
+```
+
+## Evidencia final esperada
+
+Comandos utiles para la defensa:
+
+```bash
+(cd infra && vagrant status)
+kubectl --kubeconfig infra/kubeconfig get nodes -o wide
+kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
+kubectl --kubeconfig infra/kubeconfig get svc -n the-store
+kubectl --kubeconfig infra/kubeconfig get ingress -n the-store -o wide
+bash scripts/validate-store.sh
+```
+
+Resultados esperados:
+
+- `k3s-control`, `k3s-worker-1`, `k3s-worker-2` y `k3s-worker-3` en `Ready`.
+- Pods de The Store en `Running`.
+- Al menos algun pod schedulado en `k3s-worker-3` despues del rollout de fase 11.
+- Ingress `ui` publicado en `192.168.56.10` con host `localhost`.
+- Validacion funcional final exitosa.
 
 ## Referencia principal
 

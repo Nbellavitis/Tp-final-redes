@@ -441,15 +441,8 @@ Tareas:
 - Crear namespace `the-store`.
 - Aplicar `dist/kubernetes.yaml`.
 - Mantener persistencia `in-memory` para respetar el POC y evitar agregar bases externas no comprometidas.
-- Ajustar lo minimo del Ingress si hace falta:
-  - cambiar host `localhost` por `the-store.local`, o
-  - documentar acceso usando header `Host: localhost`.
-- Recomendacion: crear una copia parametrizada o patch de despliegue para usar `the-store.local`.
-- Agregar al host:
-
-```text
-192.168.56.10 the-store.local
-```
+- Mantener el Ingress con host `localhost` y documentar acceso usando header `Host: localhost`.
+- Configurar `checkout` con `RETAIL_CHECKOUT_ENDPOINTS_ORDERS=http://orders` para que la orden final use el servicio `orders` real.
 
 Comandos esperados:
 
@@ -467,12 +460,6 @@ kubectl get pods -n the-store -o wide
 kubectl get svc -n the-store
 kubectl get ingress -n the-store
 curl -H 'Host: localhost' http://192.168.56.10/
-```
-
-O, si se usa `the-store.local`:
-
-```bash
-curl http://the-store.local/
 ```
 
 Esto cubre el caso de uso 2: despliegue de la aplicacion, pods `Running`, servicios accesibles e Ingress funcional.
@@ -503,14 +490,13 @@ kubectl logs -n the-store deploy/orders --tail=100
 Validacion automatizada opcional:
 
 ```bash
-bash src/e2e/scripts/run-docker.sh -n host 'http://the-store.local'
+bash scripts/validate-store.sh
 ```
 
 Load test opcional:
 
-```bash
-bash src/load-generator/scripts/run-docker.sh -n host -t 'http://the-store.local' -d 120
-```
+- Queda como extra tecnico fuera del foco principal.
+- Si se ejecuta, ajustar previamente el endpoint/host de Ingress para que el generador llegue con el host esperado.
 
 Nota:
 
@@ -617,12 +603,16 @@ Responsabilidad:
 ```text
 infra/ansible/inventory/hosts.yml
 infra/ansible/playbooks/site.yml
+infra/ansible/playbooks/add-worker.yml
 infra/ansible/playbooks/deploy-store.yml
 infra/ansible/roles/common/
 infra/ansible/roles/k3s_server/
 infra/ansible/roles/k3s_agent/
+infra/ansible/roles/k3s_cluster_validation/
+infra/ansible/roles/k3s_kubeconfig/
 infra/ansible/roles/ingress/
 infra/ansible/roles/the_store_images/
+infra/ansible/roles/the_store_deploy/
 ```
 
 Responsabilidad:
@@ -632,6 +622,8 @@ Responsabilidad:
 - Unir workers.
 - Instalar Ingress.
 - Distribuir imagenes.
+- Desplegar The Store.
+- Agregar `worker-3` sin reinstalar el cluster.
 - Mantener idempotencia.
 
 ### Scripts de apoyo
@@ -641,6 +633,7 @@ scripts/build-images.sh
 scripts/export-images.sh
 scripts/deploy-store.sh
 scripts/status.sh
+scripts/validate-store.sh
 ```
 
 Responsabilidad:
@@ -653,35 +646,38 @@ Responsabilidad:
 
 ```text
 docs/how-to.md
-docs/troubleshooting.md
+docs/guion-presentacion.md
+docs/validacion-final.md
 ```
 
 Responsabilidad:
 
 - Explicar como reproducir el POC.
 - Documentar problemas esperables y solucion.
+- Dejar evidencia de cierre y guion de demo.
 
 ## 7. Validaciones obligatorias
 
 ### Cluster
 
 ```bash
-kubectl get nodes -o wide
-kubectl cluster-info
-kubectl get pods -A
+kubectl --kubeconfig infra/kubeconfig get nodes -o wide
+kubectl --kubeconfig infra/kubeconfig cluster-info
+kubectl --kubeconfig infra/kubeconfig get pods -A
 ```
 
 Debe probar:
 
 - API Server funcional.
 - 1 control plane y 2 workers iniciales.
+- 1 worker adicional `k3s-worker-3` en la demo de fase 11.
 - Todos los nodos `Ready`.
 
 ### Red
 
 ```bash
-kubectl get pods -n kube-system -o wide
-kubectl get nodes -o wide
+kubectl --kubeconfig infra/kubeconfig get pods -n kube-system -o wide
+kubectl --kubeconfig infra/kubeconfig get nodes -o wide
 ```
 
 Debe probar:
@@ -693,11 +689,12 @@ Debe probar:
 ### The Store
 
 ```bash
-kubectl get deploy -n the-store
-kubectl get pods -n the-store -o wide
-kubectl get svc -n the-store
-kubectl get ingress -n the-store
-curl http://the-store.local/
+kubectl --kubeconfig infra/kubeconfig get deploy -n the-store
+kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
+kubectl --kubeconfig infra/kubeconfig get svc -n the-store
+kubectl --kubeconfig infra/kubeconfig get ingress -n the-store -o wide
+curl -H 'Host: localhost' http://192.168.56.10/
+bash scripts/validate-store.sh
 ```
 
 Debe probar:
@@ -707,11 +704,12 @@ Debe probar:
 - Services internos creados.
 - Ingress funcional.
 - UI accesible.
+- Flujo funcional completo validado.
 
 ### Gestion
 
 ```bash
-kubectl get nodes -o wide
+kubectl --kubeconfig infra/kubeconfig get nodes -o wide
 ```
 
 Antes de agregar el worker:
@@ -735,6 +733,7 @@ Debe probar:
 
 - El nuevo nodo se incorpora sin reinstalar el cluster.
 - El alta se hace por inventario Ansible y re-ejecucion del playbook.
+- The Store puede schedular pods en el nuevo nodo despues de importar imagenes y reiniciar deployments.
 
 ## 8. Riesgos y mitigaciones
 
@@ -755,13 +754,16 @@ El POC se considera completo cuando se cumplen todos estos puntos:
 - `vagrant up` crea las VMs iniciales.
 - `ansible-playbook` instala y configura K3s.
 - `kubectl get nodes` muestra 1 Control Plane y 2 Workers `Ready`.
+- `kubectl get nodes` muestra `k3s-worker-3` `Ready` despues de fase 11.
 - El cluster usa Pod CIDR `10.42.0.0/16` y Service CIDR `10.43.0.0/16`.
 - The Store despliega sus 5 servicios en namespace `the-store`.
 - Los pods quedan `Running` y los deployments `Available`.
 - La UI es accesible por Ingress via HTTP.
+- `scripts/validate-store.sh` valida el flujo funcional de The Store.
 - Se puede agregar `worker-3` al inventario y re-ejecutar Ansible.
 - `worker-3` aparece `Ready` sin reinstalar el cluster.
 - Existe un `how-to` que reproduce todo el flujo.
+- Existe un guion de presentacion y evidencia final de validacion.
 
 ## 10. Orden de trabajo recomendado
 

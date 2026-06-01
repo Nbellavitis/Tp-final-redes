@@ -2,6 +2,25 @@
 
 [![Build](https://github.com/jupmoreno/the-store/actions/workflows/main.yml/badge.svg)](https://github.com/jupmoreno/the-store/actions/workflows/main.yml)
 
+## Trabajo practico: K3s multi-nodo local
+
+Este repo incluye la implementacion del POC de Redes para desplegar The Store sobre K3s con Vagrant + Ansible:
+
+- Guia operativa: [docs/how-to.md](docs/how-to.md)
+- Plan de ejecucion: [docs/plan-ejecucion-k3s-the-store.md](docs/plan-ejecucion-k3s-the-store.md)
+- Guion de presentacion: [docs/guion-presentacion.md](docs/guion-presentacion.md)
+- Validacion final: [docs/validacion-final.md](docs/validacion-final.md)
+- Infraestructura: [infra/README.md](infra/README.md)
+
+Resumen del POC:
+
+- 1 Control Plane y 2 Workers iniciales.
+- Worker adicional `k3s-worker-3` para demo de gestion basica.
+- K3s `v1.35.5+k3s1`.
+- Red host-only `192.168.56.0/24`.
+- Ingress con `ingress-nginx`.
+- The Store desplegada en namespace `the-store`.
+
 **The Store** is a modern e-commerce platform built with microservices architecture.
 
 Our platform provides a complete shopping experience with:
