@@ -2,7 +2,8 @@
 
 # Infraestructura local del TPE:
 # - 1 Control Plane K3s
-# - 2 Workers K3s
+# - 2 Workers K3s iniciales
+# - 1 Worker adicional para la demo de fase 11
 # - Ubuntu Server 24.04 LTS
 # - Red privada 192.168.56.0/24
 
@@ -28,6 +29,14 @@ NODES = [
     hostname: "k3s-worker-2",
     ip: "192.168.56.12",
     ssh_port: 2201,
+    cpus: 2,
+    memory: 2048
+  },
+  {
+    name: "k3s-worker-3",
+    hostname: "k3s-worker-3",
+    ip: "192.168.56.13",
+    ssh_port: 2202,
     cpus: 2,
     memory: 2048
   }

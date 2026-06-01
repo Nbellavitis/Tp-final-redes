@@ -149,6 +149,33 @@ bash scripts/validate-store.sh
 
 El script usa por defecto `http://192.168.56.10` con header `Host: localhost`, valida la topologia de servicios y recorre catalogo, detalle de producto, carrito, checkout y orden final.
 
+### Fase 11: agregar worker-3
+
+Desde `infra`:
+
+```bash
+vagrant up k3s-worker-3
+```
+
+Desde `infra/ansible`, unir el nodo al cluster:
+
+```bash
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml --tags common,k3s_server,k3s_agent,k3s_validation,kubeconfig
+```
+
+Como The Store usa imagenes locales importadas en containerd, importar tambien el tar en el nodo nuevo antes de reiniciar deployments:
+
+```bash
+ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml --tags images
+```
+
+Validacion:
+
+```bash
+kubectl --kubeconfig ../kubeconfig get nodes -o wide
+kubectl --kubeconfig ../kubeconfig wait --for=condition=Ready node/k3s-worker-3 --timeout=180s
+```
+
 ## Ejecucion por plataforma
 
 ### macOS, Linux o Windows con acceso directo a host-only

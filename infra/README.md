@@ -7,6 +7,7 @@ El alcance contractual es:
 - Vagrant aprovisiona VMs Ubuntu Server 24.04 LTS.
 - Ansible configura sistema operativo, firewall, K3s e Ingress.
 - La topologia inicial es 1 Control Plane y 2 Workers.
+- La fase 11 agrega `k3s-worker-3` como Worker adicional por Vagrant + Ansible.
 - La red privada es `192.168.56.0/24`.
 - K3s queda pinneado a `v1.35.5+k3s1` para que el cluster sea reproducible.
 - Flannel VXLAN usa la interfaz host-only `eth1` para transportar Pods sobre `192.168.56.0/24`.
@@ -46,6 +47,7 @@ La implementacion se completa de forma incremental siguiendo `docs/plan-ejecucio
 | `k3s-control` | Control Plane | `192.168.56.10` | 2 | 2048 MB |
 | `k3s-worker-1` | Worker | `192.168.56.11` | 2 | 2048 MB |
 | `k3s-worker-2` | Worker | `192.168.56.12` | 2 | 2048 MB |
+| `k3s-worker-3` | Worker agregado en fase 11 | `192.168.56.13` | 2 | 2048 MB |
 
 ## Uso
 
@@ -72,6 +74,7 @@ Para verificar IPs:
 vagrant ssh k3s-control -c 'hostname -I'
 vagrant ssh k3s-worker-1 -c 'hostname -I'
 vagrant ssh k3s-worker-2 -c 'hostname -I'
+vagrant ssh k3s-worker-3 -c 'hostname -I'
 ```
 
 ## Uso con Ansible desde WSL
@@ -85,6 +88,7 @@ En WSL puede ocurrir que no exista ruta directa a la red host-only de VirtualBox
 | `k3s-control` | `2222` |
 | `k3s-worker-1` | `2200` |
 | `k3s-worker-2` | `2201` |
+| `k3s-worker-3` | `2202` |
 
 Desde PowerShell:
 

@@ -8,7 +8,7 @@ KEY_DIR="${HOME}/.ssh/tpe-redes"
 mkdir -p "${KEY_DIR}"
 chmod 700 "${HOME}/.ssh" "${KEY_DIR}"
 
-for node in k3s-control k3s-worker-1 k3s-worker-2; do
+for node in k3s-control k3s-worker-1 k3s-worker-2 k3s-worker-3; do
   source_key="${INFRA_DIR}/.vagrant/machines/${node}/virtualbox/private_key"
   target_key="${KEY_DIR}/${node}_private_key"
 

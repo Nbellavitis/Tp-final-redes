@@ -28,6 +28,10 @@ Fase 8 implementada y validada: el rol `the_store_images` copia e importa el arc
 
 Fase 9 implementada y validada: el rol `the_store_deploy` aplica The Store en namespace `the-store`, espera deployments/pods listos y valida acceso HTTP por Ingress.
 
+Fase 10 implementada y validada: `scripts/validate-store.sh` recorre la UI y valida el flujo funcional de compra contra el Ingress.
+
+Fase 11 implementada: `k3s-worker-3` se agrega como Worker adicional con IP `192.168.56.13` mediante Vagrant + Ansible.
+
 Tags de imagen esperados:
 
 - `the-store-catalog:latest`
@@ -52,6 +56,12 @@ Topologia Vagrant inicial:
 | `k3s-worker-1` | Worker | `192.168.56.11` | 2 | 2048 MB |
 | `k3s-worker-2` | Worker | `192.168.56.12` | 2 | 2048 MB |
 
+Worker adicional de fase 11:
+
+| VM | Rol | IP privada | CPU | RAM |
+| --- | --- | --- | --- | --- |
+| `k3s-worker-3` | Worker agregado | `192.168.56.13` | 2 | 2048 MB |
+
 Comandos de fase 2:
 
 ```bash
@@ -61,10 +71,7 @@ vagrant up
 vagrant status
 ```
 
-Las fases siguientes completaran:
-
-1. Validacion funcional de The Store.
-2. Alta de un nuevo Worker.
+Para una demo incremental, levantar primero los tres nodos base y luego agregar `k3s-worker-3` en la fase 11.
 
 ## Fase 3: Ansible base
 
@@ -221,6 +228,8 @@ k3s-control    Ready
 k3s-worker-1   Ready
 k3s-worker-2   Ready
 ```
+
+En la fase 11, el mismo rol valida tambien `k3s-worker-3` porque queda agregado al grupo `workers` del inventario.
 
 ## Fase 6: Kubeconfig local
 
@@ -432,6 +441,43 @@ kubectl --kubeconfig infra/kubeconfig logs -n the-store deploy/catalog --tail=10
 kubectl --kubeconfig infra/kubeconfig logs -n the-store deploy/carts --tail=100
 kubectl --kubeconfig infra/kubeconfig logs -n the-store deploy/checkout --tail=100
 kubectl --kubeconfig infra/kubeconfig logs -n the-store deploy/orders --tail=100
+```
+
+## Fase 11: Agregar un nuevo Worker
+
+La fase 11 demuestra gestion basica del cluster: se agrega `k3s-worker-3` sin reinstalar el Control Plane ni recrear los workers existentes.
+
+Desde `infra`:
+
+```bash
+vagrant up k3s-worker-3
+```
+
+Desde `infra/ansible`:
+
+```bash
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml --tags common,k3s_server,k3s_agent,k3s_validation,kubeconfig
+```
+
+Como The Store usa imagenes locales importadas en containerd, importar el tar tambien en el nodo nuevo:
+
+```bash
+ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml --tags images
+```
+
+Validacion esperada:
+
+```bash
+kubectl --kubeconfig infra/kubeconfig get nodes -o wide
+kubectl --kubeconfig infra/kubeconfig wait --for=condition=Ready node/k3s-worker-3 --timeout=180s
+```
+
+Para demostrar que el nodo queda disponible para scheduling, se puede reiniciar los deployments de The Store:
+
+```bash
+kubectl --kubeconfig infra/kubeconfig rollout restart deployment -n the-store
+kubectl --kubeconfig infra/kubeconfig rollout status deployment -n the-store --timeout=300s
+kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
 ```
 
 ## Referencia principal
