@@ -38,7 +38,8 @@ NODES = [
     ip: "192.168.56.13",
     ssh_port: 2202,
     cpus: 2,
-    memory: 2048
+    memory: 2048,
+    autostart: false
   }
 ].freeze
 
@@ -50,7 +51,7 @@ Vagrant.configure("2") do |config|
   expose_ssh = ENV.fetch("VAGRANT_EXPOSE_SSH", "false") == "true"
 
   NODES.each do |node|
-    config.vm.define node[:name] do |machine|
+    config.vm.define node[:name], autostart: node.fetch(:autostart, true) do |machine|
       machine.vm.hostname = node[:hostname]
       machine.vm.network "private_network", ip: node[:ip]
 

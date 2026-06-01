@@ -28,7 +28,7 @@ bash scripts/validate-store.sh --url http://192.168.56.10 --host localhost
 
 ## Estado de demo
 
-Con `KUBECONFIG` apuntando a `infra/kubeconfig`:
+`status.sh` usa `infra/kubeconfig` por defecto cuando existe. Si se necesita otro cluster, exportar `KUBECONFIG` antes de ejecutarlo:
 
 ```bash
 bash scripts/status.sh

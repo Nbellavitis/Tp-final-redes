@@ -10,6 +10,7 @@ Este documento resume la evidencia esperada para dar por completo el POC de K3s 
 - 1 Control Plane: `k3s-control`.
 - 2 Workers iniciales: `k3s-worker-1`, `k3s-worker-2`.
 - Worker adicional de fase 11: `k3s-worker-3`.
+- `k3s-worker-3` definido con `autostart: false` para conservar el arranque inicial de 3 VMs.
 - Red host-only `192.168.56.0/24`.
 - Pod CIDR `10.42.0.0/16`.
 - Service CIDR `10.43.0.0/16`.

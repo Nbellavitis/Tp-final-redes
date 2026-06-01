@@ -49,6 +49,8 @@ La implementacion se completa de forma incremental siguiendo `docs/plan-ejecucio
 | `k3s-worker-2` | Worker | `192.168.56.12` | 2 | 2048 MB |
 | `k3s-worker-3` | Worker agregado en fase 11 | `192.168.56.13` | 2 | 2048 MB |
 
+`k3s-worker-3` esta definido con `autostart: false`: un `vagrant up` inicial levanta solo la topologia aprobada de 1 Control Plane y 2 Workers. Para la fase 11 se crea explicitamente con `vagrant up k3s-worker-3`.
+
 ## Uso
 
 Desde esta carpeta:

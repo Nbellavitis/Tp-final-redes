@@ -85,6 +85,8 @@ Worker adicional de fase 11:
 | --- | --- | --- | --- | --- |
 | `k3s-worker-3` | Worker agregado | `192.168.56.13` | 2 | 2048 MB |
 
+`k3s-worker-3` tiene `autostart: false` en Vagrant. Esto conserva la topologia inicial aprobada cuando se ejecuta `vagrant up` y permite agregar el nodo solo durante fase 11.
+
 Comandos de fase 2:
 
 ```bash

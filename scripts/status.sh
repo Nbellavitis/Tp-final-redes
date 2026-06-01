@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NAMESPACE="${NAMESPACE:-the-store}"
+DEFAULT_KUBECONFIG="${ROOT_DIR}/infra/kubeconfig"
+
+if [[ -z "${KUBECONFIG:-}" && -f "${DEFAULT_KUBECONFIG}" ]]; then
+  export KUBECONFIG="${DEFAULT_KUBECONFIG}"
+fi
 
 echo "== Nodes =="
 kubectl get nodes -o wide
