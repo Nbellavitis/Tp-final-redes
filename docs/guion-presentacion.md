@@ -91,9 +91,24 @@ Para una validacion manual rapida:
 curl -H 'Host: localhost' http://192.168.56.10/
 ```
 
-## 6. Agregado de worker
+## 6. Escalado bajo carga: sube la demanda
 
-Mostrar el flujo de fase 11:
+Lanzar carga sostenida y escalar `ui`. El servicio tiene anti-afinidad "una replica por nodo",
+asi que con 3 nodos la 4a replica queda `Pending` (no hay donde ponerla):
+
+```bash
+kubectl --kubeconfig infra/kubeconfig apply -f dist/load-generator.yaml
+kubectl --kubeconfig infra/kubeconfig -n the-store scale deployment/ui --replicas=4
+kubectl --kubeconfig infra/kubeconfig -n the-store get pods -l app.kubernetes.io/name=ui -o wide
+# 3 Running + 1 Pending; el evento dice "didn't match pod anti-affinity rules".
+```
+
+Punto clave: es **escalado manual** (`kubectl scale`), no autoscaling (declarado fuera de alcance).
+
+## 7. Agregar worker-3 y mostrar balanceo real
+
+Sumar el nodo (sin reinstalar el Control Plane; token de join via Ansible; imagenes locales
+importadas para evitar `ImagePullBackOff`):
 
 ```bash
 (cd infra && vagrant up k3s-worker-3)
@@ -101,34 +116,21 @@ Mostrar el flujo de fase 11:
 (cd infra/ansible && ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3 -e import_store_images=true --tags images)
 ```
 
-Luego:
+La replica `Pending` se programa sola en `k3s-worker-3` y entra al balanceo del Service `ui`:
 
 ```bash
 kubectl --kubeconfig infra/kubeconfig get nodes -o wide
+kubectl --kubeconfig infra/kubeconfig -n the-store get pods -l app.kubernetes.io/name=ui -o wide
+kubectl --kubeconfig infra/kubeconfig -n the-store get endpointslices -l kubernetes.io/service-name=ui -o wide
 ```
 
 Puntos clave:
 
-- No se reinstala el Control Plane.
-- El token de join se obtiene desde Ansible.
-- `k3s-worker-3` queda `Ready`.
-- Se importan imagenes locales en el nuevo nodo para evitar `ImagePullBackOff`.
-
-## 7. Scheduling en worker-3
-
-Mostrar:
-
-```bash
-kubectl --kubeconfig infra/kubeconfig rollout restart deployment -n the-store
-kubectl --kubeconfig infra/kubeconfig rollout status deployment -n the-store --timeout=300s
-kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
-```
-
-Puntos clave:
-
-- No se promete autoscaling.
-- La prueba solo demuestra que el nodo nuevo queda disponible para scheduling.
-- En la validacion realizada, `carts` y `orders` quedaron corriendo en `k3s-worker-3`.
+- `k3s-worker-3` queda `Ready` y la 4a replica de `ui` corre ahi.
+- El pod de worker-3 aparece como endpoint READY del Service `ui`: recibe su parte del trafico
+  del load-generator. El nodo nuevo **sirve carga real**, no solo "queda disponible".
+- (Detalle: ver `dist/load-generator.yaml` y la seccion del how-to para construir/importar la
+  imagen local del generador, multi-arch para amd64/arm64.)
 
 ## 8. Limites del POC
 

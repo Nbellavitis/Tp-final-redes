@@ -511,13 +511,15 @@ Tareas:
 - Agregar `k3s-worker-3` al `Vagrantfile`.
 - Asignar IP `192.168.56.13`.
 - Definir `k3s-worker-3` en el grupo `ondemand_workers` del inventario Ansible (fuera de `k3s_cluster`, para que el flujo base no lo requiera).
-- Ejecutar:
+- Ejecutar (el playbook dedicado `add-worker.yml`, que lee el token desde el Control Plane):
 
 ```bash
 cd infra
 vagrant up k3s-worker-3
-cd ..
-ansible-playbook -i infra/ansible/inventory/hosts.yml infra/ansible/playbooks/site.yml
+cd ansible
+ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3
+ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3 -e import_store_images=true --tags images
+cd ../..
 ```
 
 Validacion:
@@ -537,12 +539,20 @@ k3s-worker-2   Ready
 k3s-worker-3   Ready
 ```
 
-Validacion adicional:
+Demo de balanceo real (el nodo nuevo sirve carga, no solo "queda disponible"):
+
+El Deployment `ui` tiene anti-afinidad "una replica por nodo". Bajo carga se escala `ui` por
+encima de la cantidad de nodos; la replica extra queda `Pending` hasta que se suma `k3s-worker-3`,
+donde se programa y entra al balanceo del Service `ui`. Es escalado **manual** (`kubectl scale`),
+no autoscaling (declarado fuera de alcance).
 
 ```bash
-kubectl get pods -n the-store -o wide
-kubectl rollout restart deployment -n the-store
-kubectl get pods -n the-store -o wide
+# Antes de sumar el nodo: lanzar carga y escalar -> queda 1 replica Pending
+kubectl apply -f dist/load-generator.yaml
+kubectl -n the-store scale deployment/ui --replicas=4
+kubectl -n the-store get pods -l app.kubernetes.io/name=ui -o wide
+# Tras sumar k3s-worker-3: la replica Pending corre ahi y es endpoint del Service ui
+kubectl -n the-store get endpointslices -l kubernetes.io/service-name=ui -o wide
 ```
 
 La validacion adicional permite mostrar que el nuevo nodo queda disponible para scheduling. No hace falta prometer autoscaling porque esta fuera de alcance.

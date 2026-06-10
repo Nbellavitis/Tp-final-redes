@@ -184,25 +184,35 @@ Resultado esperado: nodos `Ready`, pods `Running`, y la validación funcional te
 
 ---
 
-## 7. Demo opcional: agregar un worker sin reinstalar
+## 7. Demo opcional: agregar un worker para soportar más carga
 
 Demuestra la gestión/crecimiento del clúster (caso de uso 3 de la pre-entrega): el clúster
 arranca con 3 nodos y `k3s-worker-3` se suma **solo** como respuesta a carga. Por eso este nodo
 arranca apagado y está en un grupo aparte del inventario (`ondemand_workers`): el flujo base de
 las secciones 4–6 lo ignora y **no da error aunque esté apagado**.
 
+La idea: bajo carga, escalás `ui` (que tiene anti-afinidad "una réplica por nodo"); con 3 nodos
+la réplica extra queda **`Pending`**, y al agregar `k3s-worker-3` esa réplica se programa ahí y
+**sirve tráfico real** (entra al balanceo del Service `ui`). Es escalado **manual**, no autoscaling.
+
+Pasos resumidos (guía completa con la imagen del generador de carga en
+[docs/how-to.md](docs/how-to.md), sección "Agregar `k3s-worker-3` para soportar más carga"):
+
 ```bash
-cd infra
-vagrant up k3s-worker-3
-cd ansible
+# (1) Construir/importar el generador de carga y lanzarlo; (2) escalar ui -> queda 1 Pending:
+kubectl --kubeconfig infra/kubeconfig apply -f dist/load-generator.yaml
+kubectl --kubeconfig infra/kubeconfig -n the-store scale deployment/ui --replicas=4
+
+# (3) Agregar el nodo:
+cd infra && vagrant up k3s-worker-3 && cd ansible
 ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3
 ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3 -e import_store_images=true --tags images
 cd ../..
-kubectl --kubeconfig infra/kubeconfig get nodes -o wide   # ahora aparece k3s-worker-3 Ready
-```
 
-Detalle completo (incluye demostrar scheduling sobre el nodo nuevo) en
-[docs/how-to.md](docs/how-to.md), sección "Agregar k3s-worker-3".
+# (4) Evidencia: la réplica de ui ahora corre en k3s-worker-3 y es endpoint del Service:
+kubectl --kubeconfig infra/kubeconfig -n the-store get pods -l app.kubernetes.io/name=ui -o wide
+kubectl --kubeconfig infra/kubeconfig -n the-store get endpointslices -l kubernetes.io/service-name=ui -o wide
+```
 
 ---
 

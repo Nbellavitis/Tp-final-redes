@@ -581,6 +581,17 @@ spec:
         app.kubernetes.io/owner: retail-store-sample
     spec:
       serviceAccountName: ui
+      # Anti-afinidad dura: como maximo una replica de ui por nodo. Asi, al escalar ui por
+      # encima de la cantidad de nodos, la replica extra queda Pending hasta que se suma un
+      # worker nuevo (demo de escalado de la fase 11). Es una pista de scheduling, NO autoscaling.
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: ui
+                  app.kubernetes.io/instance: ui
+              topologyKey: kubernetes.io/hostname
       securityContext:
         fsGroup: 1000
       containers:

@@ -1,0 +1,15 @@
+# Imagen del generador de carga (Artillery) para el cluster K3s.
+#
+# Usa una base multi-arch (node oficial) para que funcione tanto en amd64 como en
+# arm64 (Apple Silicon). La imagen publica artilleryio/artillery es solo amd64 y en
+# nodos arm64 falla con "exec format error".
+#
+# El escenario y los helpers quedan embebidos, asi no hace falta initContainer.
+FROM node:20-bookworm-slim
+
+RUN npm install -g artillery@2.0.22 && npm cache clean --force
+
+COPY scenario.yml helpers.js /artillery/
+WORKDIR /artillery
+
+ENTRYPOINT ["artillery"]

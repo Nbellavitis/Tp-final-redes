@@ -53,14 +53,18 @@ curl -H 'Host: localhost' http://192.168.56.10/
 bash scripts/validate-store.sh
 ```
 
-Validacion de fase 11:
+Validacion de fase 11 (escalado bajo carga + alta de worker):
 
 ```bash
+# Carga + escalado: con 3 nodos, la 4a replica de ui queda Pending (anti-afinidad por nodo)
+kubectl --kubeconfig infra/kubeconfig apply -f dist/load-generator.yaml
+kubectl --kubeconfig infra/kubeconfig -n the-store scale deployment/ui --replicas=4
+# Alta del worker on-demand
 ansible-playbook -i infra/ansible/inventory/hosts.yml infra/ansible/playbooks/add-worker.yml -e add_worker_target=k3s-worker-3
 ansible-playbook -i infra/ansible/inventory/hosts.yml infra/ansible/playbooks/add-worker.yml -e add_worker_target=k3s-worker-3 -e import_store_images=true --tags images
-kubectl --kubeconfig infra/kubeconfig rollout restart deployment -n the-store
-kubectl --kubeconfig infra/kubeconfig rollout status deployment -n the-store --timeout=300s
-kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
+# La replica Pending se programa en worker-3 y entra al balanceo del Service ui
+kubectl --kubeconfig infra/kubeconfig -n the-store get pods -l app.kubernetes.io/name=ui -o wide
+kubectl --kubeconfig infra/kubeconfig -n the-store get endpointslices -l kubernetes.io/service-name=ui -o wide
 ```
 
 ## Resultado observado
@@ -71,7 +75,7 @@ kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
 - Las imagenes locales `the-store-*` quedaron importadas en todos los nodos.
 - Los deployments de The Store quedaron `Available`.
 - Los pods de The Store quedaron `Running`.
-- Despues del rollout de fase 11, `carts` y `orders` quedaron schedulados en `k3s-worker-3`.
+- En la demo de escalado (fase 11): al escalar `ui` a 4 con 3 nodos, una replica quedo `Pending` por la anti-afinidad; al sumar `k3s-worker-3` esa replica se programo ahi, entro como endpoint READY del Service `ui` y el pod sirvio trafico real del load-generator (medido en `http.server.requests`).
 - `scripts/validate-store.sh` completo home, topologia, catalogo, producto, carrito, checkout y orden final.
 - La re-ejecucion de playbooks principales quedo idempotente con `changed=0` en las pasadas de cierre.
 

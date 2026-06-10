@@ -1,0 +1,49 @@
+# Generador de carga para la demo de escalado (fase 11) en K3s.
+#
+# Corre Artillery DENTRO del cluster pegandole al Service `ui` del namespace the-store
+# (http://ui.the-store.svc). Como pega al Service, kube-proxy reparte el trafico entre TODAS
+# las replicas ready de ui, en cualquier nodo (incluida la que se programe en k3s-worker-3).
+#
+# Usa la imagen local `the-store-loadgen:latest` (multi-arch, sirve en amd64 y arm64).
+# Antes de aplicar este manifiesto hay que construirla e importarla en el Control Plane
+# (infra/ se monta como /vagrant dentro de la VM):
+#   bash scripts/build-loadgen.sh
+#   docker save the-store-loadgen:latest -o infra/the-store-loadgen.tar
+#   (cd infra && vagrant ssh k3s-control -c 'sudo k3s ctr images import /vagrant/the-store-loadgen.tar')
+#   rm -f infra/the-store-loadgen.tar
+# (El pod queda fijado al Control Plane con nodeSelector, por eso alcanza con importar ahi.)
+#
+# Uso:
+#   kubectl --kubeconfig infra/kubeconfig apply -f dist/load-generator.yaml
+#   kubectl --kubeconfig infra/kubeconfig -n the-store logs -f load-generator
+#   kubectl --kubeconfig infra/kubeconfig delete -f dist/load-generator.yaml   # al terminar
+apiVersion: v1
+kind: Pod
+metadata:
+  name: load-generator
+  namespace: the-store
+  labels:
+    app.kubernetes.io/name: load-generator
+    app.kubernetes.io/component: load-test
+spec:
+  restartPolicy: Never
+  # Fijado al Control Plane para que solo haga falta importar la imagen local ahi.
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: "true"
+  containers:
+    - name: artillery
+      image: the-store-loadgen:latest
+      imagePullPolicy: Never
+      args:
+        - "run"
+        - "-t"
+        - "http://ui.the-store.svc"
+        # Sobreescribe la fase del escenario (viene en duration: 0) por carga sostenida:
+        # 5 usuarios nuevos por segundo durante 10 minutos.
+        - "--overrides"
+        - '{"config":{"phases":[{"duration":600,"arrivalRate":5}]}}'
+        - "/artillery/scenario.yml"
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi

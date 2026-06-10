@@ -203,9 +203,42 @@ ansible-playbook -i inventory/hosts.yml playbooks/site.yml --tags kubeconfig
 cd ../..
 ```
 
-## Agregar `k3s-worker-3`
+## Agregar `k3s-worker-3` para soportar más carga
 
-Este paso es opcional y sirve para demostrar que el cluster puede crecer sin recrear todo.
+Este paso es opcional y demuestra el caso de uso 3: el cluster crece (sin recrear nada) y el
+nodo nuevo **sirve carga real**. El servicio `ui` tiene anti-afinidad "una réplica por nodo", así
+que al escalarlo por encima de la cantidad de nodos una réplica queda `Pending` hasta que se suma
+un worker. Es **escalado manual** (`kubectl scale`), no autoscaling (que está fuera de alcance).
+
+Trabajamos desde la raíz del repo con `export KUBECONFIG="$PWD/infra/kubeconfig"`.
+
+1. Construir e importar la imagen local del generador de carga (multi-arch; el pod queda fijado
+   al Control Plane, por eso alcanza con importarla ahí). `infra/` se monta como `/vagrant` en la VM:
+
+```bash
+bash scripts/build-loadgen.sh
+docker save the-store-loadgen:latest -o infra/the-store-loadgen.tar
+(cd infra && vagrant ssh k3s-control -c 'sudo k3s ctr images import /vagrant/the-store-loadgen.tar')
+rm -f infra/the-store-loadgen.tar
+```
+
+2. Lanzar carga sostenida contra el Service `ui` (Artillery in-cluster, 10 min):
+
+```bash
+kubectl --kubeconfig infra/kubeconfig apply -f dist/load-generator.yaml
+kubectl --kubeconfig infra/kubeconfig -n the-store logs -f load-generator   # opcional: ver la carga
+```
+
+3. "Sube la carga" → escalar `ui` a 4 réplicas. Con 3 nodos, una queda `Pending`:
+
+```bash
+kubectl --kubeconfig infra/kubeconfig -n the-store scale deployment/ui --replicas=4
+kubectl --kubeconfig infra/kubeconfig -n the-store get pods -l app.kubernetes.io/name=ui -o wide
+# 3 Running (uno por nodo) + 1 Pending. El evento del Pending lo explica:
+kubectl --kubeconfig infra/kubeconfig -n the-store describe pod -l app.kubernetes.io/name=ui | grep -A3 Events
+```
+
+4. Agregar el nodo (incluye importar las imágenes locales en el worker nuevo):
 
 ```bash
 cd infra
@@ -216,13 +249,26 @@ ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_t
 cd ../..
 ```
 
-Demostrar scheduling sobre el nuevo nodo:
+5. La réplica `Pending` se programa automáticamente en `k3s-worker-3` y sirve tráfico. Evidencia:
 
 ```bash
-kubectl --kubeconfig infra/kubeconfig rollout restart deployment -n the-store
-kubectl --kubeconfig infra/kubeconfig rollout status deployment -n the-store --timeout=300s
-kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
+# La 4a replica de ui quedo Running en k3s-worker-3:
+kubectl --kubeconfig infra/kubeconfig -n the-store get pods -l app.kubernetes.io/name=ui -o wide
+# El pod de worker-3 entra como endpoint READY del Service ui (recibe su parte del trafico):
+kubectl --kubeconfig infra/kubeconfig -n the-store get endpointslices -l kubernetes.io/service-name=ui -o wide
+# El pod de ui en worker-3 esta atendiendo requests del load-generator:
+kubectl --kubeconfig infra/kubeconfig -n the-store logs -l app.kubernetes.io/name=ui --prefix --tail=20
 ```
+
+6. Al terminar la demo:
+
+```bash
+kubectl --kubeconfig infra/kubeconfig delete -f dist/load-generator.yaml
+kubectl --kubeconfig infra/kubeconfig -n the-store scale deployment/ui --replicas=1
+```
+
+> Importante: no re-ejecutes `deploy-store.yml` en medio de esta demo. El `kubectl apply` del
+> manifiesto vuelve `ui` a `replicas: 1` y deshace el escalado.
 
 ## Referencia por fases
 
@@ -626,20 +672,26 @@ Como The Store usa imagenes locales importadas en containerd, el segundo comando
 
 Nota: no usar `--limit k3s-worker-3`, porque `add-worker.yml` necesita pasar por el Control Plane para leer el token de join.
 
-Validacion esperada desde la raiz del repo:
+Validacion de que el nodo se unio:
 
 ```bash
 kubectl --kubeconfig infra/kubeconfig get nodes -o wide
 kubectl --kubeconfig infra/kubeconfig wait --for=condition=Ready node/k3s-worker-3 --timeout=180s
 ```
 
-Para demostrar que el nodo queda disponible para scheduling, se puede reiniciar los deployments de The Store desde la raiz del repo:
+Para demostrar que el nodo nuevo **sirve carga real** (no solo que "queda disponible"), ver la
+guia paso a paso en **Agregar `k3s-worker-3` para soportar más carga** (mas arriba): se lanza el
+load-generator, se escala `ui` (anti-afinidad "una replica por nodo") hasta dejar una replica
+`Pending`, y al unir `k3s-worker-3` esa replica se programa ahi y entra al balanceo del Service
+`ui`. Resumen de la evidencia:
 
 ```bash
-kubectl --kubeconfig infra/kubeconfig rollout restart deployment -n the-store
-kubectl --kubeconfig infra/kubeconfig rollout status deployment -n the-store --timeout=300s
-kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
+kubectl --kubeconfig infra/kubeconfig -n the-store get pods -l app.kubernetes.io/name=ui -o wide
+kubectl --kubeconfig infra/kubeconfig -n the-store get endpointslices -l kubernetes.io/service-name=ui -o wide
 ```
+
+Esto es **escalado manual** (`kubectl scale`), no autoscaling: el autoscaling esta declarado
+fuera de alcance en la pre-entrega.
 
 ## Troubleshooting basico
 
@@ -768,7 +820,7 @@ Resultados esperados:
 
 - `k3s-control`, `k3s-worker-1`, `k3s-worker-2` y `k3s-worker-3` en `Ready`.
 - Pods de The Store en `Running`.
-- Al menos algun pod schedulado en `k3s-worker-3` despues del rollout de fase 11.
+- Tras escalar `ui` en la fase 11, una réplica de `ui` corriendo en `k3s-worker-3` y presente como endpoint del Service `ui` (el nodo nuevo sirve carga).
 - Ingress `ui` publicado en `192.168.56.10` con host `localhost`.
 - Validacion funcional final exitosa.
 
