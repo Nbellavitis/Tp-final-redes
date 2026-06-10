@@ -7,7 +7,8 @@ Redes de Información - TP Especial          ​    ​                         
                                      1er. Cuatrimestre 2026
 
 
-Objetivo
+
+bjetivo
 
 ​       El objetivo del TP Especial es que cada grupo implemente un componente
 específico de la arquitectura de una aplicación y muestre su funcionamiento frente al
