@@ -6,9 +6,10 @@ Automatizacion del cluster K3s local.
 
 El inventario vive en `inventory/hosts.yml` y separa:
 
-- `control_plane`
-- `workers`
-- `k3s_cluster`
+- `control_plane`: `k3s-control`.
+- `workers`: workers base `k3s-worker-1` y `k3s-worker-2`.
+- `ondemand_workers`: `k3s-worker-3`, apagado por defecto y **fuera de `k3s_cluster`**. El flujo base no lo toca ni falla si esta apagado; se incorpora solo con `add-worker.yml` (demo de escalado).
+- `k3s_cluster`: union de `control_plane` + `workers` (los nodos del flujo base).
 
 ## Playbooks
 

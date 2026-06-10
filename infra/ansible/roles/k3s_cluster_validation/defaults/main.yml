@@ -1,2 +1,5 @@
 ---
 k3s_expected_worker_group: workers
+# Lista de nodos worker que se esperan en estado Ready. Por defecto son los del
+# grupo base (workers). add-worker.yml la sobreescribe para incluir el nodo agregado.
+k3s_validation_nodes: "{{ groups[k3s_expected_worker_group] | default([]) }}"

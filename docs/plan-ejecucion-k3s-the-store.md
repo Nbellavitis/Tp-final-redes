@@ -510,7 +510,7 @@ Tareas:
 
 - Agregar `k3s-worker-3` al `Vagrantfile`.
 - Asignar IP `192.168.56.13`.
-- Agregar `k3s-worker-3` al grupo `workers` del inventario Ansible.
+- Definir `k3s-worker-3` en el grupo `ondemand_workers` del inventario Ansible (fuera de `k3s_cluster`, para que el flujo base no lo requiera).
 - Ejecutar:
 
 ```bash

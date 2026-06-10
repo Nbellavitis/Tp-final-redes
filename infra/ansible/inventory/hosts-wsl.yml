@@ -17,6 +17,10 @@ all:
           ansible_host: "{{ lookup('env', 'NAT_SSH_HOST') | default('127.0.0.1', true) }}"
           ansible_port: 2201
           k3s_node_ip: 192.168.56.12
+    # Worker bajo demanda: apagado por defecto y fuera de k3s_cluster para que el
+    # flujo base no falle si esta apagado. Se suma solo con add-worker.yml.
+    ondemand_workers:
+      hosts:
         k3s-worker-3:
           ansible_host: "{{ lookup('env', 'NAT_SSH_HOST') | default('127.0.0.1', true) }}"
           ansible_port: 2202

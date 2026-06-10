@@ -1,53 +1,257 @@
-# The Store
+# The Store sobre K3s multi-nodo (TPE Redes — Grupo 12)
 
-[![Build](https://github.com/jupmoreno/the-store/actions/workflows/main.yml/badge.svg)](https://github.com/jupmoreno/the-store/actions/workflows/main.yml)
+Trabajo Práctico Especial de Redes de Información, tema **6. Despliegue y Gestión del Cluster
+de Kubernetes**. Este repositorio levanta, de forma automatizada y reproducible, un clúster
+**Kubernetes (K3s)** de **1 control plane + 2 workers** sobre **3 máquinas virtuales** y despliega
+sobre él la aplicación de e-commerce **The Store**.
 
-## Trabajo practico: K3s multi-nodo local
+> Esta guía está pensada para que **cualquier persona, sin conocimiento previo de Kubernetes,
+> Vagrant o Ansible**, pueda levantar todo desde cero copiando y pegando los comandos.
+> Si algo falla en un paso, **no sigas al siguiente**: revisá [docs/how-to.md](docs/how-to.md)
+> (guía detallada con troubleshooting).
 
-Este repo incluye la implementacion del POC de Redes para desplegar The Store sobre K3s con Vagrant + Ansible:
+---
 
-- Guia operativa: [docs/how-to.md](docs/how-to.md)
-- Plan de ejecucion: [docs/plan-ejecucion-k3s-the-store.md](docs/plan-ejecucion-k3s-the-store.md)
-- Guion de presentacion: [docs/guion-presentacion.md](docs/guion-presentacion.md)
-- Validacion final: [docs/validacion-final.md](docs/validacion-final.md)
-- Infraestructura: [infra/README.md](infra/README.md)
+## 1. ¿Qué hace cada herramienta?
 
-Resumen del POC:
+No hace falta saber usarlas; el proyecto las orquesta por vos. Solo necesitás tenerlas instaladas.
 
-- 1 Control Plane y 2 Workers iniciales.
-- Worker adicional `k3s-worker-3` para demo de gestion basica.
-- K3s `v1.35.5+k3s1`.
-- Red host-only `192.168.56.0/24`.
-- Ingress con `ingress-nginx`.
-- The Store desplegada en namespace `the-store`.
+| Herramienta | Para qué sirve en este TP |
+|---|---|
+| **VirtualBox** | Hipervisor: crea y corre las máquinas virtuales (las "computadoras" del clúster). |
+| **Vagrant** | Crea esas VMs automáticamente a partir de un archivo (`infra/Vagrantfile`). |
+| **Ansible** | Entra a las VMs por SSH y las configura: instala K3s, une los workers, abre puertos, instala el Ingress. |
+| **K3s** | Una distribución liviana de **Kubernetes**, el orquestador que corre la aplicación. |
+| **Ingress (ingress-nginx)** | La puerta de entrada HTTP/HTTPS que publica la app hacia afuera. |
+| **Docker** | Construye las imágenes de los microservicios de The Store. |
+| **kubectl** | El cliente de línea de comandos para hablar con el clúster (ver nodos, pods, etc.). |
 
-Para correr el TPE desde cero, seguir la guia operativa: [docs/how-to.md](docs/how-to.md). La seccion de desarrollo con `local.sh`/Kind mas abajo corresponde al flujo original del proyecto base y no es el camino del POC K3s multi-nodo.
+---
 
-**The Store** is a modern e-commerce platform built with microservices architecture.
+## 2. Qué se va a levantar
 
-Our platform provides a complete shopping experience with:
-- **Beautiful storefront** with customizable themes and responsive design
-- **Scalable microservices** built with multiple languages and frameworks
-- **Real-time inventory management** and order processing
+Topología base (lo que crea el flujo normal):
 
-## 🏗️ Architecture
+| VM | Rol | IP privada | CPU | RAM |
+|---|---|---|---|---|
+| `k3s-control` | Control Plane | `192.168.56.10` | 2 | 2048 MB |
+| `k3s-worker-1` | Worker | `192.168.56.11` | 2 | 2048 MB |
+| `k3s-worker-2` | Worker | `192.168.56.12` | 2 | 2048 MB |
 
-The Store is built with a microservices architecture that uses different technologies:
+Nodo extra, **opcional**, solo para la demo de "agregar un worker" (sección 7):
+
+| VM | Rol | IP privada | CPU | RAM |
+|---|---|---|---|---|
+| `k3s-worker-3` | Worker adicional | `192.168.56.13` | 2 | 2048 MB |
+
+Parámetros de red del clúster: **Pod CIDR** `10.42.0.0/16`, **Service CIDR** `10.43.0.0/16`,
+overlay **Flannel (VXLAN)**. SO de los nodos: **Ubuntu Server 24.04 LTS**. K3s `v1.35.5+k3s1`.
+
+---
+
+## 3. Requisitos
+
+### Hardware / sistema operativo
+
+- **Sistemas soportados:** Windows, Linux y macOS (Intel y **Apple Silicon**).
+  - En **macOS Apple Silicon** se necesita **VirtualBox 7.1 o superior** (usa automáticamente la
+    variante ARM64 de la box). Probado en Apple Silicon con VirtualBox 7.2.
+  - En **Windows**, Ansible se ejecuta a través de **WSL** (ver [docs/how-to.md](docs/how-to.md), sección "Uso desde WSL").
+- **RAM libre:** al menos **6 GB** para la topología base (8 GB si además agregás `k3s-worker-3`).
+- **Red:** la subred `192.168.56.0/24` debe estar libre. Si otra herramienta ya la usa,
+  liberala o ajustá las IPs en `infra/Vagrantfile` y el inventario.
+
+### Software a instalar
+
+Instalá estas herramientas (links oficiales):
+
+| Software | Link de instalación |
+|---|---|
+| VirtualBox | https://www.virtualbox.org/wiki/Downloads |
+| Vagrant | https://developer.hashicorp.com/vagrant/install |
+| Ansible | https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html |
+| Docker | https://docs.docker.com/get-docker/ |
+| kubectl | https://kubernetes.io/docs/tasks/tools/ |
+
+Verificá que todo esté disponible en tu terminal (y que Docker esté corriendo):
+
+```bash
+vagrant --version
+VBoxManage --version
+ansible --version
+docker info | head -5      # si falla, abrí Docker Desktop / iniciá el servicio
+kubectl version --client
+```
+
+---
+
+## 4. Correr todo desde cero
+
+> Ejecutá los comandos **desde la raíz del repositorio**, salvo cuando el bloque diga `cd ...`.
+> Para confirmar que estás en la raíz: `ls README.md infra/Vagrantfile`.
+
+### Paso 1 — Construir y exportar las imágenes de The Store
+
+```bash
+bash scripts/build-images.sh
+bash scripts/export-images.sh
+```
+
+Construye las 5 imágenes locales (`the-store-catalog`, `cart`, `checkout`, `orders`, `ui`) y las
+empaqueta en `/tmp/the-store-images.tar`, que Ansible copiará a cada nodo.
+
+### Paso 2 — Crear las 3 máquinas virtuales
+
+```bash
+cd infra
+vagrant up k3s-control k3s-worker-1 k3s-worker-2
+cd ..
+```
+
+La primera vez puede tardar varios minutos (descarga la box de Ubuntu y crea las VMs).
+> No uses `vagrant up` "a secas": nombrá las 3 VMs como arriba para no levantar también `k3s-worker-3`.
+
+### Paso 3 — Configurar el clúster K3s con Ansible
+
+```bash
+cd infra/ansible
+ansible -i inventory/hosts.yml k3s_cluster -m ping
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml
+cd ../..
+```
+
+Instala K3s en el control plane, une los 2 workers con el token del clúster, abre los puertos en el
+firewall, exporta el archivo `infra/kubeconfig` (credenciales locales) e instala `ingress-nginx`.
+
+### Paso 4 — Desplegar The Store sobre el clúster
+
+```bash
+cd infra/ansible
+ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml
+cd ../..
+```
+
+Importa las imágenes en cada nodo y aplica los manifiestos `dist/kubernetes.yaml` en el namespace `the-store`.
+
+### Paso 5 — Validar que todo quedó corriendo
+
+```bash
+export KUBECONFIG="$PWD/infra/kubeconfig"   # le dice a kubectl dónde están las credenciales del clúster
+bash scripts/status.sh
+bash scripts/validate-store.sh
+```
+
+La validación funcional debe terminar con:
+
+```text
+[store-validation] Functional validation completed successfully
+```
+
+---
+
+## 5. Abrir la app en el navegador
+
+La aplicación se publica a través del Ingress con el host `localhost`. Dos formas de verla:
+
+**Opción A — Port-forward (la más simple):** dejá este comando corriendo en una terminal:
+
+```bash
+kubectl --kubeconfig infra/kubeconfig -n the-store port-forward svc/ui 8080:80
+```
+
+y abrí **http://localhost:8080** en el navegador. Para cortarlo: `Ctrl+C`.
+
+**Opción B — Verificar el Ingress directamente** (la ruta real de producción, vía `ingress-nginx`):
+
+```bash
+curl -H 'Host: localhost' http://192.168.56.10/
+```
+
+Debe responder `HTTP 200` con el HTML de la home.
+
+---
+
+## 6. ¿Cómo sé que funcionó? (validación)
+
+```bash
+export KUBECONFIG="$PWD/infra/kubeconfig"
+kubectl get nodes -o wide                 # los 3 nodos en estado Ready
+kubectl get pods -n the-store -o wide     # los 5 servicios en Running
+bash scripts/validate-store.sh            # recorrido funcional completo (catálogo → carrito → orden)
+```
+
+Resultado esperado: nodos `Ready`, pods `Running`, y la validación funcional termina con éxito.
+
+---
+
+## 7. Demo opcional: agregar un worker sin reinstalar
+
+Demuestra la gestión/crecimiento del clúster (caso de uso 3 de la pre-entrega): el clúster
+arranca con 3 nodos y `k3s-worker-3` se suma **solo** como respuesta a carga. Por eso este nodo
+arranca apagado y está en un grupo aparte del inventario (`ondemand_workers`): el flujo base de
+las secciones 4–6 lo ignora y **no da error aunque esté apagado**.
+
+```bash
+cd infra
+vagrant up k3s-worker-3
+cd ansible
+ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3
+ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3 -e import_store_images=true --tags images
+cd ../..
+kubectl --kubeconfig infra/kubeconfig get nodes -o wide   # ahora aparece k3s-worker-3 Ready
+```
+
+Detalle completo (incluye demostrar scheduling sobre el nodo nuevo) en
+[docs/how-to.md](docs/how-to.md), sección "Agregar k3s-worker-3".
+
+---
+
+## 8. Limpieza
+
+```bash
+cd infra
+vagrant halt        # apaga las VMs sin borrarlas
+# o
+vagrant destroy -f  # elimina todo el entorno
+cd ..
+```
+
+---
+
+## 9. Documentación del proyecto
+
+- **Guía operativa detallada (con troubleshooting):** [docs/how-to.md](docs/how-to.md)
+- Plan de ejecución por fases: [docs/plan-ejecucion-k3s-the-store.md](docs/plan-ejecucion-k3s-the-store.md)
+- Evidencia de validación final: [docs/validacion-final.md](docs/validacion-final.md)
+- Guion de la presentación: [docs/guion-presentacion.md](docs/guion-presentacion.md)
+- Infraestructura (Vagrant + Ansible): [infra/README.md](infra/README.md) · [infra/ansible/README.md](infra/ansible/README.md)
+
+---
+
+## Arquitectura de The Store
+
+The Store es una plataforma de e-commerce construida con microservicios en distintos lenguajes:
 
 ![Architecture](/docs/images/architecture.png)
 
-| Service | Language | Description |
+| Servicio | Lenguaje | Descripción |
 |---------|----------|-------------|
-| [UI](./src/ui/) | Java (Spring Boot) | Modern web interface with themes and chat bot |
-| [Catalog](./src/catalog/) | Go | Product catalog API with search and filtering |
-| [Cart](./src/cart/) | Java (Spring Boot) | Shopping cart management with Redis/DynamoDB |
-| [Orders](./src/orders/) | Java (Spring Boot) | Order processing and management |
-| [Checkout](./src/checkout/) | Node.js (NestJS) | Checkout orchestration and payment processing |
+| [UI](./src/ui/) | Java (Spring Boot) | Interfaz web (storefront). |
+| [Catalog](./src/catalog/) | Go | API del catálogo de productos. |
+| [Cart](./src/cart/) | Java (Spring Boot) | Carrito de compras. |
+| [Orders](./src/orders/) | Java (Spring Boot) | Procesamiento de órdenes. |
+| [Checkout](./src/checkout/) | Node.js (NestJS) | Orquestación de checkout y pago. |
 
+---
 
-## 🛠️ Development original con Kind
+## Flujo original del proyecto base con Kind — ⚠️ NO usar para el TPE
 
-Esta seccion conserva el flujo original del proyecto base. Para el TPE de Redes, usar [docs/how-to.md](docs/how-to.md).
+> Esta sección pertenece al proyecto base original (The Store) y usa **Kind** + el script
+> `local.sh`. **No es el camino del TPE de Redes** y no se usa para la entrega. Para el TP, seguí
+> las secciones 1–8 de arriba (Vagrant + Ansible + K3s). Se conserva solo como referencia histórica.
+
+<details>
+<summary>Ver flujo original con Kind / local.sh</summary>
 
 ### Prerequisites
 - [Docker](https://docs.docker.com/get-docker/) running
@@ -56,58 +260,26 @@ Esta seccion conserva el flujo original del proyecto base. Para el TPE de Redes,
 
 ### Cluster Management
 
-Use the `local.sh` script to manage your local Kubernetes cluster:
-
 ```bash
-# Create a new cluster and deploy all services
-./local.sh create-cluster
-
-# Rebuild the entire cluster (delete and recreate)
-./local.sh rebuild-cluster
-
-# Delete the cluster
-./local.sh delete-cluster
-
-# Check cluster status
-./local.sh status
-
-# Build and load Docker images only
-./local.sh reload-images
+./local.sh create-cluster     # crea el clúster Kind y despliega los servicios
+./local.sh rebuild-cluster    # recrea el clúster
+./local.sh delete-cluster     # borra el clúster
+./local.sh status             # estado del clúster
+./local.sh reload-images      # solo reconstruye y carga imágenes
 ```
 
-After running `./local.sh create-cluster`, access The Store at: **http://localhost**.
+Tras `./local.sh create-cluster`, The Store queda en **http://localhost**.
 
 ### Testing
 
-#### E2E Testing
-
-Run end-to-end tests to validate the complete system:
-
 ```bash
-# Run e2e tests on existing cluster
-./local.sh e2e-test
+./local.sh e2e-test                        # tests e2e sobre el clúster existente
+./local.sh create-cluster --skip-tests     # crear sin correr tests
+./local.sh load-test                       # tests de carga
 ```
 
-**Note**: These tests are run automatically when creating or rebuilding the cluster. You can skip them using the `--skip-tests` parameter for faster setup:
-
-```bash
-# Create cluster without running tests (faster setup)
-./local.sh create-cluster --skip-tests
-
-# Rebuild cluster without running tests
-./local.sh rebuild-cluster --skip-tests
-```
-
-#### Load Testing
-Run load generator tests to validate system performance:
-
-```bash
-# Run load generator tests
-./local.sh load-test
-```
-
-The load generator will run performance tests against your local cluster for 10 minutes (or until manually stopped) to validate system behavior under load.
+</details>
 
 ---
 
-**The Store** - Built with ❤️ for modern e-commerce
+**The Store** — Built with ❤️ for modern e-commerce

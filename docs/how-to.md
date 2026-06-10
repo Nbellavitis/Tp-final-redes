@@ -2,7 +2,7 @@
 
 Esta es la guia principal para levantar el POC de Redes desde cero. El objetivo es correr The Store sobre un cluster K3s local con Vagrant + Ansible.
 
-Si llegaste desde el README: para este POC no uses el flujo `local.sh`/Kind. Ese flujo pertenece al proyecto base. El camino del TPE es este documento.
+> IMPORTANTE: para este POC **no** uses el flujo `local.sh`/Kind. Ese flujo pertenece al proyecto base (queda al final del README solo como referencia historica). El camino del TPE es **este** documento: Vagrant + Ansible + K3s.
 
 ## Como usar esta guia
 
@@ -14,14 +14,30 @@ Si llegaste desde el README: para este POC no uses el flujo `local.sh`/Kind. Ese
 
 ## Prerrequisitos
 
-Instalar y tener disponible en la terminal:
+Instalar y tener disponible en la terminal (links oficiales):
 
-- VirtualBox.
-- Vagrant.
-- Ansible.
-- Docker corriendo.
-- `kubectl`.
-- `curl` y `bash`.
+- VirtualBox: https://www.virtualbox.org/wiki/Downloads
+- Vagrant: https://developer.hashicorp.com/vagrant/install
+- Ansible: https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html
+- Docker corriendo: https://docs.docker.com/get-docker/
+- `kubectl`: https://kubernetes.io/docs/tasks/tools/
+- `curl` y `bash` (vienen por defecto en Linux/macOS; en Windows usar WSL).
+
+Chequeo rapido (Docker debe estar corriendo):
+
+```bash
+vagrant --version
+VBoxManage --version
+ansible --version
+docker info | head -5
+kubectl version --client
+```
+
+Requisitos de host:
+
+- Sistemas soportados: Windows, Linux y macOS (Intel y Apple Silicon).
+  - En macOS Apple Silicon se necesita VirtualBox 7.1 o superior; usa automaticamente la box ARM64.
+  - En Windows, Ansible corre desde WSL (ver "Uso desde WSL" mas abajo).
 - Al menos 6 GB de RAM libres para la topologia base.
 - Al menos 8 GB de RAM libres si tambien vas a agregar `k3s-worker-3`.
 
@@ -43,7 +59,7 @@ Nodo opcional para la demo de crecimiento del cluster:
 | --- | --- | --- | --- | --- |
 | `k3s-worker-3` | Worker adicional | `192.168.56.13` | 2 | 2048 MB |
 
-`k3s-worker-3` tiene `autostart: false`: no se levanta con el flujo base. Se agrega solo cuando quieras demostrar la fase 11.
+`k3s-worker-3` tiene `autostart: false`: no se levanta con el flujo base. Ademas vive en el grupo `ondemand_workers` del inventario (fuera de `k3s_cluster`), asi que mientras este apagado el flujo base lo ignora y **no produce errores ni avisos de "unreachable"**. Se agrega solo cuando quieras demostrar la fase 11 (escalado por carga).
 
 ## Correr todo desde cero
 
@@ -370,7 +386,7 @@ k3s-worker-1   Ready
 k3s-worker-2   Ready
 ```
 
-En la fase 11, el mismo rol valida tambien `k3s-worker-3` porque queda agregado al grupo `workers` del inventario.
+`k3s-worker-3` vive en el grupo `ondemand_workers` del inventario, fuera de `k3s_cluster`: el flujo base nunca lo toca y no falla aunque este apagado. En la fase 11, `add-worker.yml` lo agrega y lo valida explicitamente (la validacion incluye el nodo pasado en `add_worker_target`).
 
 ## Fase 6: Kubeconfig local
 

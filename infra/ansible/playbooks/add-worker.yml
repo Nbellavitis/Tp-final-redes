@@ -22,6 +22,10 @@
 - name: Validate K3s cluster after adding workers
   hosts: control_plane
   become: true
+  vars:
+    # Valida los workers base + el nodo recien agregado (add_worker_target).
+    # Si no se paso add_worker_target, valida solo los workers base.
+    k3s_validation_nodes: "{{ (groups['workers'] | default([])) + ([add_worker_target] if add_worker_target is defined else []) }}"
   tags:
     - k3s_validation
     - k3s_agent

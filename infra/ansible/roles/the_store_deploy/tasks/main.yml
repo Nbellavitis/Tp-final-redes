@@ -89,15 +89,17 @@
     --timeout={{ the_store_wait_timeout }}
   changed_when: false
 
-- name: Wait for The Store pods to be Ready
+- name: Wait for The Store deployments to finish rolling out
+  # Se valida por deployment (no "pods --all"): asi el chequeo ignora pods
+  # huerfanos/Terminating que puedan quedar de un nodo apagado (p. ej. el worker
+  # bajo demanda), que nunca pasan a Ready y harian fallar el wait global.
   ansible.builtin.command: >-
-    /usr/local/bin/kubectl wait
+    /usr/local/bin/kubectl rollout status
+    deployment/{{ item }}
     --namespace {{ the_store_namespace }}
-    --for=condition=Ready
-    pods
-    --all
     --timeout={{ the_store_wait_timeout }}
   changed_when: false
+  loop: "{{ the_store_expected_deployments }}"
 
 - name: Verify expected The Store deployments exist
   ansible.builtin.command: "/usr/local/bin/kubectl get deployment {{ item }} --namespace {{ the_store_namespace }}"
