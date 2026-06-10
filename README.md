@@ -21,6 +21,8 @@ Resumen del POC:
 - Ingress con `ingress-nginx`.
 - The Store desplegada en namespace `the-store`.
 
+Para correr el TPE desde cero, seguir la guia operativa: [docs/how-to.md](docs/how-to.md). La seccion de desarrollo con `local.sh`/Kind mas abajo corresponde al flujo original del proyecto base y no es el camino del POC K3s multi-nodo.
+
 **The Store** is a modern e-commerce platform built with microservices architecture.
 
 Our platform provides a complete shopping experience with:
@@ -43,7 +45,9 @@ The Store is built with a microservices architecture that uses different technol
 | [Checkout](./src/checkout/) | Node.js (NestJS) | Checkout orchestration and payment processing |
 
 
-## 🛠️ Development
+## 🛠️ Development original con Kind
+
+Esta seccion conserva el flujo original del proyecto base. Para el TPE de Redes, usar [docs/how-to.md](docs/how-to.md).
 
 ### Prerequisites
 - [Docker](https://docs.docker.com/get-docker/) running

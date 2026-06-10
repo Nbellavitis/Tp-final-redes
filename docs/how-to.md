@@ -1,77 +1,35 @@
 # How-to: K3s multi-nodo para The Store
 
-Documento operativo para reproducir el POC.
+Esta es la guia principal para levantar el POC de Redes desde cero. El objetivo es correr The Store sobre un cluster K3s local con Vagrant + Ansible.
+
+Si llegaste desde el README: para este POC no uses el flujo `local.sh`/Kind. Ese flujo pertenece al proyecto base. El camino del TPE es este documento.
+
+## Como usar esta guia
+
+- Copia y ejecuta primero la seccion **Correr todo desde cero**.
+- Ejecuta los comandos desde la raiz del repositorio, salvo que el bloque diga explicitamente `cd infra` o `cd infra/ansible`.
+- Si un paso falla, no sigas con el siguiente: anda a **Troubleshooting basico** y valida ese punto.
+- El archivo `infra/kubeconfig` se genera durante el provisioning. No viene en Git porque tiene credenciales locales del cluster.
+- Si estas en WSL, lee **Uso desde WSL** antes de correr Ansible.
 
 ## Prerrequisitos
 
-Host recomendado:
+Instalar y tener disponible en la terminal:
 
 - VirtualBox.
 - Vagrant.
 - Ansible.
-- Docker.
+- Docker corriendo.
 - `kubectl`.
-- `curl`, `bash` y Ruby del sistema para validaciones estaticas.
-- Al menos 8 GB de RAM libres para correr 4 VMs durante la fase 11.
+- `curl` y `bash`.
+- Al menos 6 GB de RAM libres para la topologia base.
+- Al menos 8 GB de RAM libres si tambien vas a agregar `k3s-worker-3`.
 
-El POC usa:
+El POC usa la red host-only `192.168.56.0/24`. Si otra herramienta ya usa esa red, Vagrant o Kubernetes pueden fallar hasta liberar esa red o ajustar las IPs del proyecto.
 
-- Ubuntu Server 24.04 LTS en VMs Vagrant.
-- K3s `v1.35.5+k3s1`.
-- Red host-only `192.168.56.0/24`.
-- Pod CIDR `10.42.0.0/16`.
-- Service CIDR `10.43.0.0/16`.
-- Flannel VXLAN por `eth1`.
-- Traefik deshabilitado.
-- Ingress con `ingress-nginx`.
+## Que se va a levantar
 
-## Estado
-
-Fase 0 completada: estructura inicial del proyecto.
-
-Fase 1 completada: imagenes Docker de The Store construidas localmente.
-
-Fase 2 completada: `infra/Vagrantfile` define la topologia inicial de 3 VMs Ubuntu Server 24.04 LTS.
-
-Nota: se usa la box `bento/ubuntu-24.04` para VirtualBox.
-
-Fase 3 completada a nivel implementacion: Ansible base queda definido en el rol `common` y validado con `ansible-playbook --syntax-check`.
-
-Nota: la ejecucion contra VMs debe correrla cada integrante desde su entorno, usando el inventario principal o el inventario alternativo para WSL segun corresponda.
-
-Fase 4 completada a nivel implementacion: el rol `k3s_server` instala y configura K3s server en `k3s-control`, usando una version pinneada y validando que el nodo quede `Ready`.
-
-Fase 5 completada a nivel implementacion: el rol `k3s_agent` une `k3s-worker-1` y `k3s-worker-2` al cluster usando automaticamente el token del Control Plane y validando que ambos workers queden `Ready`.
-
-Fase 6 completada a nivel implementacion: el rol `k3s_kubeconfig` exporta `infra/kubeconfig` para operar el cluster desde el host.
-
-Fase 7 completada a nivel implementacion: el rol `ingress` instala `ingress-nginx` compatible con la clase `nginx` del manifiesto de The Store y valida que el controller quede listo.
-
-Fase 8 implementada y validada: el rol `the_store_images` copia e importa el archivo de imagenes exportado en todos los nodos K3s.
-
-Fase 9 implementada y validada: el rol `the_store_deploy` aplica The Store en namespace `the-store`, espera deployments/pods listos y valida acceso HTTP por Ingress.
-
-Fase 10 implementada y validada: `scripts/validate-store.sh` recorre la UI y valida el flujo funcional de compra contra el Ingress.
-
-Fase 11 implementada: `k3s-worker-3` se agrega como Worker adicional con IP `192.168.56.13` mediante Vagrant + Ansible.
-
-Tags de imagen esperados:
-
-- `the-store-catalog:latest`
-- `the-store-cart:latest`
-- `the-store-checkout:latest`
-- `the-store-orders:latest`
-- `the-store-ui:latest`
-
-Comando usado:
-
-```bash
-bash scripts/build-images.sh
-```
-
-Nota: los Dockerfiles Java ejecutan `chmod +x ./mvnw` durante el build para que el wrapper funcione aunque el checkout local no preserve el bit ejecutable.
-
-Topologia Vagrant inicial:
+Topologia base:
 
 | VM | Rol | IP privada | CPU | RAM |
 | --- | --- | --- | --- | --- |
@@ -79,52 +37,63 @@ Topologia Vagrant inicial:
 | `k3s-worker-1` | Worker | `192.168.56.11` | 2 | 2048 MB |
 | `k3s-worker-2` | Worker | `192.168.56.12` | 2 | 2048 MB |
 
-Worker adicional de fase 11:
+Nodo opcional para la demo de crecimiento del cluster:
 
 | VM | Rol | IP privada | CPU | RAM |
 | --- | --- | --- | --- | --- |
-| `k3s-worker-3` | Worker agregado | `192.168.56.13` | 2 | 2048 MB |
+| `k3s-worker-3` | Worker adicional | `192.168.56.13` | 2 | 2048 MB |
 
-`k3s-worker-3` tiene `autostart: false` en Vagrant. Esto conserva la topologia inicial aprobada cuando se ejecuta `vagrant up` y permite agregar el nodo solo durante fase 11.
+`k3s-worker-3` tiene `autostart: false`: no se levanta con el flujo base. Se agrega solo cuando quieras demostrar la fase 11.
 
-Comandos de fase 2:
+## Correr todo desde cero
+
+Parate en la raiz del repositorio. Una forma rapida de verificarlo:
 
 ```bash
-cd infra
-vagrant validate
-vagrant up
-vagrant status
+ls README.md docs/how-to.md infra/Vagrantfile
 ```
 
-Para una demo incremental, levantar primero los tres nodos base y luego agregar `k3s-worker-3` en la fase 11.
-
-## Flujo rapido reproducible
-
-Desde la raiz del repositorio:
+### 1. Construir y exportar las imagenes
 
 ```bash
 bash scripts/build-images.sh
 bash scripts/export-images.sh
 ```
 
-Levantar las VMs base:
+Esto construye estas imagenes locales:
+
+- `the-store-catalog:latest`
+- `the-store-cart:latest`
+- `the-store-checkout:latest`
+- `the-store-orders:latest`
+- `the-store-ui:latest`
+
+Luego las exporta a `/tmp/the-store-images.tar`, que Ansible va a copiar a los nodos K3s.
+
+### 2. Levantar las VMs base
 
 ```bash
 cd infra
 vagrant validate
 vagrant up k3s-control k3s-worker-1 k3s-worker-2
+vagrant status
 cd ..
 ```
 
-Configurar K3s, kubeconfig e Ingress:
+El primer `vagrant up` puede tardar varios minutos porque descarga la box `bento/ubuntu-24.04` y crea las VMs.
+
+### 3. Configurar K3s, workers, kubeconfig e Ingress
 
 ```bash
 cd infra/ansible
+ansible -i inventory/hosts.yml k3s_cluster -m ping
 ansible-playbook -i inventory/hosts.yml playbooks/site.yml
 cd ../..
 ```
 
-Importar imagenes y desplegar The Store:
+Este paso instala K3s, une los workers, exporta `infra/kubeconfig` e instala `ingress-nginx`.
+
+### 4. Importar imagenes y desplegar The Store
 
 ```bash
 cd infra/ansible
@@ -132,7 +101,9 @@ ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml
 cd ../..
 ```
 
-Validar estado y flujo funcional:
+Este paso importa `/tmp/the-store-images.tar` en containerd de cada nodo y aplica `dist/kubernetes.yaml` en el namespace `the-store`.
+
+### 5. Validar que todo quedo corriendo
 
 ```bash
 export KUBECONFIG="$PWD/infra/kubeconfig"
@@ -140,7 +111,85 @@ bash scripts/status.sh
 bash scripts/validate-store.sh
 ```
 
-Agregar `worker-3`:
+La validacion funcional debe terminar con:
+
+```text
+[store-validation] Functional validation completed successfully
+```
+
+### 6. Abrir la UI
+
+La validacion del POC usa el Ingress con `Host: localhost`:
+
+```bash
+curl -H 'Host: localhost' http://192.168.56.10/
+```
+
+Para verla comoda en un navegador, usa port-forward desde la raiz del repo:
+
+```bash
+kubectl --kubeconfig infra/kubeconfig -n the-store port-forward svc/ui 8080:80
+```
+
+Mientras ese comando queda corriendo, abrir:
+
+```text
+http://localhost:8080
+```
+
+Para cortar el port-forward, presionar `Ctrl+C`.
+
+## Uso desde WSL
+
+El inventario normal usa la red host-only `192.168.56.0/24`. Si estas en WSL y Ansible no llega por SSH a las VMs, usa el inventario alternativo `inventory/hosts-wsl.yml`.
+
+Desde PowerShell, en la carpeta `infra` del repo:
+
+```powershell
+$env:VAGRANT_EXPOSE_SSH="true"
+vagrant up k3s-control k3s-worker-1 k3s-worker-2
+```
+
+Si las VMs ya estaban levantadas antes de activar `VAGRANT_EXPOSE_SSH`, ejecutar en PowerShell:
+
+```powershell
+$env:VAGRANT_EXPOSE_SSH="true"
+vagrant reload
+```
+
+Desde WSL, en la carpeta `infra/ansible` del repo:
+
+```bash
+bash scripts/prepare-wsl-keys.sh
+export NAT_SSH_HOST="$(awk '/nameserver/ {print $2; exit}' /etc/resolv.conf)"
+ansible -i inventory/hosts-wsl.yml k3s_cluster -m ping
+ansible-playbook -i inventory/hosts-wsl.yml playbooks/site.yml
+ansible-playbook -i inventory/hosts-wsl.yml playbooks/deploy-store.yml
+```
+
+Importante: este modo resuelve SSH para Ansible. El kubeconfig generado apunta a `https://192.168.56.10:6443`; si WSL no tiene ruta a esa red, `kubectl` desde WSL no va a conectar. En ese caso valida con:
+
+```bash
+cd infra
+vagrant ssh k3s-control -c 'sudo kubectl get nodes -o wide'
+cd ..
+```
+
+O ejecuta `kubectl` desde Windows/macOS/Linux con acceso a la red host-only.
+
+## Regenerar solo el kubeconfig
+
+Si las VMs ya existen y solo falta `infra/kubeconfig`:
+
+```bash
+cd infra/ansible
+ansible-playbook -i inventory/hosts.yml playbooks/site.yml --tags kubeconfig
+cd ../..
+```
+
+## Agregar `k3s-worker-3`
+
+Este paso es opcional y sirve para demostrar que el cluster puede crecer sin recrear todo.
 
 ```bash
 cd infra
@@ -158,6 +207,10 @@ kubectl --kubeconfig infra/kubeconfig rollout restart deployment -n the-store
 kubectl --kubeconfig infra/kubeconfig rollout status deployment -n the-store --timeout=300s
 kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
 ```
+
+## Referencia por fases
+
+Las secciones siguientes explican que hace cada parte del flujo. No hace falta ejecutarlas una por una si ya corriste **Correr todo desde cero**.
 
 ## Fase 3: Ansible base
 
@@ -185,8 +238,10 @@ Validaciones realizadas:
 ```bash
 ruby -c infra/Vagrantfile
 bash -n infra/ansible/scripts/prepare-wsl-keys.sh
+cd infra/ansible
 ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
 ansible-playbook -i inventory/hosts-wsl.yml playbooks/site.yml --syntax-check
+cd ../..
 ```
 
 Comando:
@@ -202,7 +257,7 @@ Si Ansible corre desde WSL y no llega a `192.168.56.0/24`, usar el inventario NA
 Desde PowerShell:
 
 ```powershell
-cd "C:\Users\nico\Desktop\ITBA\Redes\Tp-final\infra"
+cd "C:\ruta\a\Tp-final-redes\infra"
 $env:VAGRANT_EXPOSE_SSH="true"
 vagrant reload
 ```
@@ -434,20 +489,25 @@ Luego importar en todos los nodos K3s:
 ```bash
 cd infra/ansible
 ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml --tags images
+cd ../..
 ```
 
 Si se usa otra ubicacion para el tar:
 
 ```bash
+cd infra/ansible
 ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml --tags images -e the_store_images_local_archive=/ruta/the-store-images.tar
+cd ../..
 ```
 
 Validacion esperada:
 
 ```bash
+cd infra
 vagrant ssh k3s-control -c 'sudo k3s ctr images list | grep the-store'
 vagrant ssh k3s-worker-1 -c 'sudo k3s ctr images list | grep the-store'
 vagrant ssh k3s-worker-2 -c 'sudo k3s ctr images list | grep the-store'
+cd ..
 ```
 
 ## Fase 9: Deploy de The Store
@@ -473,13 +533,15 @@ Archivos implementados:
 - `infra/ansible/playbooks/deploy-store.yml`
 - `dist/kubernetes.yaml`
 
-Desde `infra/ansible`:
+Desde la raiz del repo:
 
 ```bash
+cd infra/ansible
 ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml --tags deploy
+cd ../..
 ```
 
-Validacion esperada:
+Validacion esperada desde la raiz del repo:
 
 ```bash
 kubectl --kubeconfig infra/kubeconfig get pods -n the-store -o wide
@@ -533,34 +595,29 @@ kubectl --kubeconfig infra/kubeconfig logs -n the-store deploy/orders --tail=100
 
 La fase 11 demuestra gestion basica del cluster: se agrega `k3s-worker-3` sin reinstalar el Control Plane ni recrear los workers existentes.
 
-Desde `infra`:
+Desde la raiz del repo:
 
 ```bash
+cd infra
 vagrant up k3s-worker-3
-```
-
-Desde `infra/ansible`:
-
-```bash
+cd ansible
 ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3
-```
-
-Como The Store usa imagenes locales importadas en containerd, importar el tar tambien en el nodo nuevo:
-
-```bash
 ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3 -e import_store_images=true --tags images
+cd ../..
 ```
+
+Como The Store usa imagenes locales importadas en containerd, el segundo comando importa el tar tambien en el nodo nuevo.
 
 Nota: no usar `--limit k3s-worker-3`, porque `add-worker.yml` necesita pasar por el Control Plane para leer el token de join.
 
-Validacion esperada:
+Validacion esperada desde la raiz del repo:
 
 ```bash
 kubectl --kubeconfig infra/kubeconfig get nodes -o wide
 kubectl --kubeconfig infra/kubeconfig wait --for=condition=Ready node/k3s-worker-3 --timeout=180s
 ```
 
-Para demostrar que el nodo queda disponible para scheduling, se puede reiniciar los deployments de The Store:
+Para demostrar que el nodo queda disponible para scheduling, se puede reiniciar los deployments de The Store desde la raiz del repo:
 
 ```bash
 kubectl --kubeconfig infra/kubeconfig rollout restart deployment -n the-store
@@ -615,6 +672,7 @@ El kubeconfig apunta a `https://192.168.56.10:6443`. Si WSL no tiene ruta a la r
 ```bash
 cd infra
 vagrant ssh k3s-control -c 'sudo kubectl get nodes -o wide'
+cd ..
 ```
 
 O usar `kubectl` desde un host con acceso a `192.168.56.0/24`.
@@ -627,17 +685,20 @@ The Store usa imagenes locales. Reexportar e importar:
 bash scripts/export-images.sh
 cd infra/ansible
 ansible-playbook -i inventory/hosts.yml playbooks/deploy-store.yml --tags images
+cd ../..
 ```
 
 Si el problema ocurre despues de agregar `worker-3`:
 
 ```bash
+cd infra/ansible
 ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3 -e import_store_images=true --tags images
+cd ../..
 ```
 
 ### Ingress no responde
 
-Validar controller e Ingress:
+Validar controller e Ingress desde la raiz del repo:
 
 ```bash
 kubectl --kubeconfig infra/kubeconfig get pods -n ingress-nginx
