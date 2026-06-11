@@ -53,10 +53,13 @@ overlay **Flannel (VXLAN)**. SO de los nodos: **Ubuntu Server 24.04 LTS**. K3s `
 
 ### Hardware / sistema operativo
 
-- **Sistemas soportados:** Windows, Linux y macOS (Intel y **Apple Silicon**).
+- **SO del host (tu máquina):** Windows, Linux o macOS (Intel y **Apple Silicon**). Es donde
+  instalás las herramientas de abajo y desde donde corrés todo.
   - En **macOS Apple Silicon** se necesita **VirtualBox 7.1 o superior** (usa automáticamente la
     variante ARM64 de la box). Probado en Apple Silicon con VirtualBox 7.2.
   - En **Windows**, Ansible se ejecuta a través de **WSL** (ver [docs/how-to.md](docs/how-to.md), sección "Uso desde WSL").
+- **SO de las VMs (nodos del clúster):** **Ubuntu Server 24.04 LTS**. No hace falta instalarlo:
+  Vagrant lo provisiona automáticamente en cada VM.
 - **RAM libre:** al menos **6 GB** para la topología base (8 GB si además agregás `k3s-worker-3`).
 - **Red:** la subred `192.168.56.0/24` debe estar libre. Si otra herramienta ya la usa,
   liberala o ajustá las IPs en `infra/Vagrantfile` y el inventario.
@@ -238,7 +241,6 @@ cd ..
 - **Guía operativa detallada (con troubleshooting):** [docs/how-to.md](docs/how-to.md)
 - Plan de ejecución por fases: [docs/plan-ejecucion-k3s-the-store.md](docs/plan-ejecucion-k3s-the-store.md)
 - Evidencia de validación final: [docs/validacion-final.md](docs/validacion-final.md)
-- Guion de la presentación: [docs/guion-presentacion.md](docs/guion-presentacion.md)
 - Infraestructura (Vagrant + Ansible): [infra/README.md](infra/README.md) · [infra/ansible/README.md](infra/ansible/README.md)
 
 ---

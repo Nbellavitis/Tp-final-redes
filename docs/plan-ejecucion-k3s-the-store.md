@@ -561,7 +561,7 @@ kubectl delete node k3s-worker-3
 
 Asi se muestra el ciclo completo de elasticidad manual: scale-out (sumar el nodo y que entre al balanceo) y scale-in (retirarlo cuando baja la carga). No se promete autoscaling porque esta fuera de alcance.
 
-### Fase 12: How-to final y guion de presentacion
+### Fase 12: How-to final y material de presentacion
 
 Objetivo: entregar material que permita reproducir la implementacion y defenderla oralmente.
 
@@ -584,7 +584,7 @@ Contenido minimo del how-to:
 9. Troubleshooting basico.
 10. Como limpiar el entorno.
 
-Guion de demo recomendado:
+Demo recomendada:
 
 1. Mostrar contrato de arquitectura.
 2. Ejecutar o mostrar `vagrant status`.
@@ -660,7 +660,6 @@ Responsabilidad:
 
 ```text
 docs/how-to.md
-docs/guion-presentacion.md
 docs/validacion-final.md
 ```
 
@@ -668,7 +667,7 @@ Responsabilidad:
 
 - Explicar como reproducir el POC.
 - Documentar problemas esperables y solucion.
-- Dejar evidencia de cierre y guion de demo.
+- Dejar evidencia de cierre y pasos de demo.
 
 ## 7. Validaciones obligatorias
 
@@ -777,7 +776,7 @@ El POC se considera completo cuando se cumplen todos estos puntos:
 - Se puede agregar `worker-3` al inventario y re-ejecutar Ansible.
 - `worker-3` aparece `Ready` sin reinstalar el cluster.
 - Existe un `how-to` que reproduce todo el flujo.
-- Existe un guion de presentacion y evidencia final de validacion.
+- Existe evidencia final de validacion.
 
 ## 10. Orden de trabajo recomendado
 
@@ -794,7 +793,7 @@ El POC se considera completo cuando se cumplen todos estos puntos:
 11. Validar acceso por Ingress.
 12. Agregar worker nuevo.
 13. Escribir `docs/how-to.md`.
-14. Preparar guion de demo.
+14. Preparar pasos de demo.
 
 ## 11. Decision clave
 
