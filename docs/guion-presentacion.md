@@ -93,11 +93,10 @@ curl -H 'Host: localhost' http://192.168.56.10/
 
 ## 6. Escalado bajo carga: sube la demanda
 
-Lanzar carga sostenida y escalar `ui`. El servicio tiene anti-afinidad "una replica por nodo",
+Escalar `ui` para sumar capacidad. El servicio tiene anti-afinidad "una replica por nodo",
 asi que con 3 nodos la 4a replica queda `Pending` (no hay donde ponerla):
 
 ```bash
-kubectl --kubeconfig infra/kubeconfig apply -f dist/load-generator.yaml
 kubectl --kubeconfig infra/kubeconfig -n the-store scale deployment/ui --replicas=4
 kubectl --kubeconfig infra/kubeconfig -n the-store get pods -l app.kubernetes.io/name=ui -o wide
 # 3 Running + 1 Pending; el evento dice "didn't match pod anti-affinity rules".
@@ -105,7 +104,7 @@ kubectl --kubeconfig infra/kubeconfig -n the-store get pods -l app.kubernetes.io
 
 Punto clave: es **escalado manual** (`kubectl scale`), no autoscaling (declarado fuera de alcance).
 
-## 7. Agregar worker-3 y mostrar balanceo real
+## 7. Agregar worker-3 y que entre al balanceo
 
 Sumar el nodo (sin reinstalar el Control Plane; token de join via Ansible; imagenes locales
 importadas para evitar `ImagePullBackOff`):
@@ -116,7 +115,7 @@ importadas para evitar `ImagePullBackOff`):
 (cd infra/ansible && ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3 -e import_store_images=true --tags images)
 ```
 
-La replica `Pending` se programa sola en `k3s-worker-3` y entra al balanceo del Service `ui`:
+La replica `Pending` se programa sola en `k3s-worker-3` y entra al Service `ui`:
 
 ```bash
 kubectl --kubeconfig infra/kubeconfig get nodes -o wide
@@ -127,10 +126,20 @@ kubectl --kubeconfig infra/kubeconfig -n the-store get endpointslices -l kuberne
 Puntos clave:
 
 - `k3s-worker-3` queda `Ready` y la 4a replica de `ui` corre ahi.
-- El pod de worker-3 aparece como endpoint READY del Service `ui`: recibe su parte del trafico
-  del load-generator. El nodo nuevo **sirve carga real**, no solo "queda disponible".
-- (Detalle: ver `dist/load-generator.yaml` y la seccion del how-to para construir/importar la
-  imagen local del generador, multi-arch para amd64/arm64.)
+- El pod de worker-3 aparece como endpoint READY del Service `ui`: queda en la rotacion de
+  balanceo (recibe su parte del trafico). El nodo nuevo **participa del servicio**, no solo
+  "queda disponible para scheduling".
+
+Scale-in (cuando baja la carga, se retira el nodo: cierra el ciclo de elasticidad):
+
+```bash
+kubectl --kubeconfig infra/kubeconfig -n the-store scale deployment/ui --replicas=1
+kubectl --kubeconfig infra/kubeconfig drain k3s-worker-3 --ignore-daemonsets --delete-emptydir-data
+kubectl --kubeconfig infra/kubeconfig delete node k3s-worker-3
+(cd infra && vagrant halt k3s-worker-3)
+```
+
+- Todo el ciclo (scale-out al sumar el nodo, scale-in al retirarlo) es **manual**, no autoscaling.
 
 ## 8. Limites del POC
 

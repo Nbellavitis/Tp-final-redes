@@ -193,25 +193,30 @@ las secciones 4–6 lo ignora y **no da error aunque esté apagado**.
 
 La idea: bajo carga, escalás `ui` (que tiene anti-afinidad "una réplica por nodo"); con 3 nodos
 la réplica extra queda **`Pending`**, y al agregar `k3s-worker-3` esa réplica se programa ahí y
-**sirve tráfico real** (entra al balanceo del Service `ui`). Es escalado **manual**, no autoscaling.
+**entra a la rotación de balanceo** del Service `ui`. Es escalado **manual**, no autoscaling.
 
-Pasos resumidos (guía completa con la imagen del generador de carga en
+Pasos resumidos (guía completa en
 [docs/how-to.md](docs/how-to.md), sección "Agregar `k3s-worker-3` para soportar más carga"):
 
 ```bash
-# (1) Construir/importar el generador de carga y lanzarlo; (2) escalar ui -> queda 1 Pending:
-kubectl --kubeconfig infra/kubeconfig apply -f dist/load-generator.yaml
+# (1) Escalar ui -> con 3 nodos queda 1 réplica Pending (anti-afinidad por nodo):
 kubectl --kubeconfig infra/kubeconfig -n the-store scale deployment/ui --replicas=4
 
-# (3) Agregar el nodo:
+# (2) Agregar el nodo:
 cd infra && vagrant up k3s-worker-3 && cd ansible
 ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3
 ansible-playbook -i inventory/hosts.yml playbooks/add-worker.yml -e add_worker_target=k3s-worker-3 -e import_store_images=true --tags images
 cd ../..
 
-# (4) Evidencia: la réplica de ui ahora corre en k3s-worker-3 y es endpoint del Service:
+# (3) Evidencia: la réplica de ui ahora corre en k3s-worker-3 y es endpoint del Service:
 kubectl --kubeconfig infra/kubeconfig -n the-store get pods -l app.kubernetes.io/name=ui -o wide
 kubectl --kubeconfig infra/kubeconfig -n the-store get endpointslices -l kubernetes.io/service-name=ui -o wide
+
+# (4) Scale-in: cuando baja la carga, se reduce ui y se retira el nodo (vuelve al baseline de 3):
+kubectl --kubeconfig infra/kubeconfig -n the-store scale deployment/ui --replicas=1
+kubectl --kubeconfig infra/kubeconfig drain k3s-worker-3 --ignore-daemonsets --delete-emptydir-data
+kubectl --kubeconfig infra/kubeconfig delete node k3s-worker-3
+(cd infra && vagrant halt k3s-worker-3)
 ```
 
 ---

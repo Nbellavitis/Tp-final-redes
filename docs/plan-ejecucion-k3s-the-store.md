@@ -539,23 +539,27 @@ k3s-worker-2   Ready
 k3s-worker-3   Ready
 ```
 
-Demo de balanceo real (el nodo nuevo sirve carga, no solo "queda disponible"):
+Demo de balanceo (el nodo nuevo entra a la rotacion del Service, no solo "queda disponible"):
 
-El Deployment `ui` tiene anti-afinidad "una replica por nodo". Bajo carga se escala `ui` por
-encima de la cantidad de nodos; la replica extra queda `Pending` hasta que se suma `k3s-worker-3`,
-donde se programa y entra al balanceo del Service `ui`. Es escalado **manual** (`kubectl scale`),
-no autoscaling (declarado fuera de alcance).
+El Deployment `ui` tiene anti-afinidad "una replica por nodo". Para sumar capacidad se escala `ui`
+por encima de la cantidad de nodos; la replica extra queda `Pending` hasta que se suma
+`k3s-worker-3`, donde se programa y entra como endpoint del Service `ui`. Es escalado **manual**
+(`kubectl scale`), no autoscaling (declarado fuera de alcance).
 
 ```bash
-# Antes de sumar el nodo: lanzar carga y escalar -> queda 1 replica Pending
-kubectl apply -f dist/load-generator.yaml
+# Antes de sumar el nodo: escalar -> con 3 nodos queda 1 replica Pending
 kubectl -n the-store scale deployment/ui --replicas=4
 kubectl -n the-store get pods -l app.kubernetes.io/name=ui -o wide
 # Tras sumar k3s-worker-3: la replica Pending corre ahi y es endpoint del Service ui
 kubectl -n the-store get endpointslices -l kubernetes.io/service-name=ui -o wide
+# Scale-in: cuando baja la carga se reduce ui y se retira el nodo (cierra el ciclo)
+kubectl -n the-store scale deployment/ui --replicas=1
+kubectl drain k3s-worker-3 --ignore-daemonsets --delete-emptydir-data
+kubectl delete node k3s-worker-3
+(cd infra && vagrant halt k3s-worker-3)
 ```
 
-La validacion adicional permite mostrar que el nuevo nodo queda disponible para scheduling. No hace falta prometer autoscaling porque esta fuera de alcance.
+Asi se muestra el ciclo completo de elasticidad manual: scale-out (sumar el nodo y que entre al balanceo) y scale-in (retirarlo cuando baja la carga). No se promete autoscaling porque esta fuera de alcance.
 
 ### Fase 12: How-to final y guion de presentacion
 
